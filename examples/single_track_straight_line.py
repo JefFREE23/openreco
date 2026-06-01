@@ -1,3 +1,5 @@
+print("SCRIPT STARTED")
+
 """
 Straight-line single-track checkpoint example.
 
