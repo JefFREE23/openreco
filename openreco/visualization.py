@@ -9,6 +9,7 @@ Main v0 visualization:
     - smeared measurements
     - predicted Kalman states
     - filtered Kalman states
+    - smoothed Kalman states
 """
 
 import numpy as np
@@ -104,6 +105,7 @@ def plot_cylindrical_track_event(
     measured_positions: np.ndarray,
     predicted_positions: np.ndarray | None = None,
     filtered_positions: np.ndarray | None = None,
+    smoothed_positions: np.ndarray | None = None,
     title: str = "OpenReco cylindrical track event",
     show_detector: bool = True,
 ):
@@ -122,6 +124,8 @@ def plot_cylindrical_track_event(
         Optional predicted Kalman positions with shape (n, 3).
     filtered_positions:
         Optional filtered Kalman positions with shape (n, 3).
+    smoothed_positions:
+        Optional smoothed Kalman positions with shape (n, 3).
     title:
         Plot title.
     show_detector:
@@ -146,6 +150,12 @@ def plot_cylindrical_track_event(
         filtered_positions = _validate_positions(
             "filtered_positions",
             filtered_positions,
+        )
+
+    if smoothed_positions is not None:
+        smoothed_positions = _validate_positions(
+            "smoothed_positions",
+            smoothed_positions,
         )
 
     fig = plt.figure(figsize=(9, 7))
@@ -185,6 +195,15 @@ def plot_cylindrical_track_event(
             filtered_positions[:, 2],
             marker="s",
             label="filtered states",
+        )
+
+    if smoothed_positions is not None:
+        ax.plot(
+            smoothed_positions[:, 0],
+            smoothed_positions[:, 1],
+            smoothed_positions[:, 2],
+            marker="^",
+            label="smoothed states",
         )
 
     ax.set_xlabel("x")
