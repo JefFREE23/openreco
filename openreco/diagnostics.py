@@ -8,17 +8,11 @@ Main diagnostics:
     - Kalman residuals
     - Kalman pulls using residual covariance S = H P H^T + R
     - chi-square summaries
-    - momentum error
+    - momentum estimate and uncertainty
     - covariance checks
 
-Important:
-    For proper Kalman residual pulls, use the residual covariance stored in
-    KalmanUpdateResult, not only the raw measurement covariance.
-
-Current v0 note:
-    The cylindrical Kalman update currently uses phi only.
-    The full [dphi, dz] residual is still useful for diagnostics, but z is not
-    part of the current 5D covariance update.
+For Kalman residual pulls, use the residual covariance stored in
+KalmanUpdateResult, not only the raw measurement covariance.
 """
 
 from dataclasses import dataclass
@@ -69,6 +63,7 @@ class MomentumSummary:
 
     truth_p: float
     fitted_p: float
+    fitted_sigma_p: float
     absolute_error: float
     relative_error: float
 
@@ -79,8 +74,12 @@ class MomentumSummary:
         if self.fitted_p <= 0.0:
             raise ValueError("fitted_p must be positive")
 
+        if self.fitted_sigma_p < 0.0:
+            raise ValueError("fitted_sigma_p must be non-negative")
+
         object.__setattr__(self, "truth_p", float(self.truth_p))
         object.__setattr__(self, "fitted_p", float(self.fitted_p))
+        object.__setattr__(self, "fitted_sigma_p", float(self.fitted_sigma_p))
         object.__setattr__(self, "absolute_error", float(self.absolute_error))
         object.__setattr__(self, "relative_error", float(self.relative_error))
 
@@ -110,11 +109,6 @@ def summarize_vectors(values: np.ndarray) -> VectorSummary:
 def kalman_residuals(results: Iterable[KalmanUpdateResult]) -> np.ndarray:
     """
     Return Kalman residuals from update results.
-
-    These residuals correspond to the measurement dimensions actually used
-    in the Kalman update.
-
-    For the current cylindrical v0 update, this is [dphi].
     """
 
     results = list(results)
@@ -154,15 +148,11 @@ def kalman_pulls(results: Iterable[KalmanUpdateResult]) -> np.ndarray:
     """
     Compute Kalman residual pulls.
 
-    Correct pull definition for Kalman residuals:
-
-        pull = residual / sqrt(diag(S))
+    pull = residual / sqrt(diag(S))
 
     where:
 
-        S = H P H^T + R
-
-    The residual covariance S is stored in KalmanUpdateResult.
+    S = H P H^T + R
     """
 
     results = list(results)
@@ -247,6 +237,31 @@ def momentum_from_state(state: TrackState) -> float:
     return float(1.0 / abs(state.q_over_p))
 
 
+def momentum_uncertainty_from_state(state: TrackState) -> float:
+    """
+    Estimate momentum uncertainty from q_over_p covariance.
+
+    If:
+        p = 1 / |q_over_p|
+
+    then, by first-order error propagation:
+
+        sigma_p ≈ sigma_q_over_p / q_over_p^2
+    """
+
+    if np.isclose(state.q_over_p, 0.0):
+        raise ValueError("cannot estimate momentum uncertainty from q_over_p close to zero")
+
+    q_over_p_variance = state.covariance[4, 4]
+
+    if q_over_p_variance < 0.0:
+        raise ValueError("q_over_p covariance variance must be non-negative")
+
+    sigma_q_over_p = np.sqrt(q_over_p_variance)
+
+    return float(sigma_q_over_p / (state.q_over_p**2))
+
+
 def momentum_summary(
     truth_particle: Particle,
     fitted_state: TrackState,
@@ -257,6 +272,7 @@ def momentum_summary(
 
     truth_p = truth_particle.p
     fitted_p = momentum_from_state(fitted_state)
+    fitted_sigma_p = momentum_uncertainty_from_state(fitted_state)
 
     absolute_error = fitted_p - truth_p
     relative_error = absolute_error / truth_p
@@ -264,6 +280,7 @@ def momentum_summary(
     return MomentumSummary(
         truth_p=truth_p,
         fitted_p=fitted_p,
+        fitted_sigma_p=fitted_sigma_p,
         absolute_error=absolute_error,
         relative_error=relative_error,
     )
@@ -290,6 +307,14 @@ def covariance_standard_deviations(state: TrackState) -> np.ndarray:
     return np.sqrt(diagonal)
 
 
+def covariance_is_symmetric(state: TrackState, atol: float = 1e-10) -> bool:
+    """
+    Check whether state covariance is symmetric.
+    """
+
+    return bool(np.allclose(state.covariance, state.covariance.T, atol=atol))
+
+
 def covariance_eigenvalues(state: TrackState) -> np.ndarray:
     """
     Return covariance eigenvalues for a symmetric covariance matrix.
@@ -299,14 +324,6 @@ def covariance_eigenvalues(state: TrackState) -> np.ndarray:
         raise ValueError("covariance must be symmetric before eigenvalue check")
 
     return np.linalg.eigvalsh(state.covariance)
-
-
-def covariance_is_symmetric(state: TrackState, atol: float = 1e-10) -> bool:
-    """
-    Check whether state covariance is symmetric.
-    """
-
-    return bool(np.allclose(state.covariance, state.covariance.T, atol=atol))
 
 
 def covariance_has_nonnegative_diagonal(state: TrackState) -> bool:
@@ -361,12 +378,9 @@ def cylindrical_diagnostic_residuals(
     measurements: Iterable[Measurement],
 ) -> np.ndarray:
     """
-    Compute full cylindrical diagnostic residuals [dphi, dz].
+    Compute full cylindrical residuals [dphi, dz].
 
-    Important:
-        In the current v0 EKF, only dphi is used in the Kalman update.
-        dz is diagnostic only because z is not part of the current 5D
-        covariance update.
+    In the new bound-state v0, both phi and z are used in the Kalman update.
     """
 
     results = list(results)
