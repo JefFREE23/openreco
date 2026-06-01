@@ -11,6 +11,7 @@ It uses:
     - smeared cylindrical measurements [phi, z]
     - truth-assisted initial seed
     - surface-bound cylindrical EKF Kalman filter
+    - backward smoothing
     - cylindrical detector visualization
 
 This is still a minimal v0 reconstruction chain, not ACTS-level tracking.
@@ -42,6 +43,7 @@ from openreco.kalman import (
 from openreco.measurements import make_cylindrical_measurement
 from openreco.particle_gun import make_fixed_particle
 from openreco.propagation import propagate_to_barrel_detector, radial_distance
+from openreco.smoothing import smooth_track, smoothed_positions
 from openreco.state import make_cylindrical_state
 from openreco.visualization import plot_cylindrical_track_event
 
@@ -138,6 +140,7 @@ def print_summary(
     truth_results,
     measurements,
     kalman_results,
+    smoothing_results,
 ):
     """
     Print reconstruction summary.
@@ -157,23 +160,37 @@ def print_summary(
     print(f"  q/p      = {truth_particle.q_over_p:.6f}")
     print()
 
-    final_state = kalman_results[-1].filtered_state
-    mom = momentum_summary(truth_particle, final_state)
+    final_filtered_state = kalman_results[-1].filtered_state
+    final_smoothed_state = smoothing_results[-1].smoothed_state
+
+    mom = momentum_summary(truth_particle, final_smoothed_state)
     pulls = kalman_pull_summary(kalman_results)
 
     print("Final filtered bound state:")
-    print(f"  surface  = {final_state.surface_name}")
-    print(f"  radius   = {final_state.radius:.4f}")
-    print(f"  phi      = {final_state.phi:.6f}")
-    print(f"  z        = {final_state.z:.4f}")
-    print(f"  alpha    = {final_state.dir0:.6f}")
-    print(f"  tanλ     = {final_state.dir1:.6f}")
-    print(f"  q/p      = {final_state.q_over_p:.6f}")
-    print(f"  global x = {final_state.x:.4f}")
-    print(f"  global y = {final_state.y:.4f}")
+    print(f"  surface  = {final_filtered_state.surface_name}")
+    print(f"  radius   = {final_filtered_state.radius:.4f}")
+    print(f"  phi      = {final_filtered_state.phi:.6f}")
+    print(f"  z        = {final_filtered_state.z:.4f}")
+    print(f"  alpha    = {final_filtered_state.dir0:.6f}")
+    print(f"  tanλ     = {final_filtered_state.dir1:.6f}")
+    print(f"  q/p      = {final_filtered_state.q_over_p:.6f}")
+    print(f"  global x = {final_filtered_state.x:.4f}")
+    print(f"  global y = {final_filtered_state.y:.4f}")
     print()
 
-    print("Momentum estimate:")
+    print("Final smoothed bound state:")
+    print(f"  surface  = {final_smoothed_state.surface_name}")
+    print(f"  radius   = {final_smoothed_state.radius:.4f}")
+    print(f"  phi      = {final_smoothed_state.phi:.6f}")
+    print(f"  z        = {final_smoothed_state.z:.4f}")
+    print(f"  alpha    = {final_smoothed_state.dir0:.6f}")
+    print(f"  tanλ     = {final_smoothed_state.dir1:.6f}")
+    print(f"  q/p      = {final_smoothed_state.q_over_p:.6f}")
+    print(f"  global x = {final_smoothed_state.x:.4f}")
+    print(f"  global y = {final_smoothed_state.y:.4f}")
+    print()
+
+    print("Momentum estimate from final smoothed state:")
     print(f"  truth p  = {mom.truth_p:.4f}")
     print(f"  fitted p = {mom.fitted_p:.4f} ± {mom.fitted_sigma_p:.4f}")
     print(f"  abs err  = {mom.absolute_error:.4f}")
@@ -185,29 +202,37 @@ def print_summary(
     print(f"  n updates        = {len(kalman_results)}")
     print(f"  pull mean [φ,z]  = {format_vector(pulls.mean, precision=4)}")
     print(f"  pull std  [φ,z]  = {format_vector(pulls.std, precision=4)}")
-    print(f"  covariance valid = {covariance_is_valid(final_state)}")
+    print(f"  covariance valid = {covariance_is_valid(final_smoothed_state)}")
     print()
 
     print("Layer residuals:")
     print("  Kalman update uses local cylindrical measurement [phi, z].")
 
-    for truth_result, measurement, kalman_result in zip(
+    for truth_result, measurement, kalman_result, smoothing_result in zip(
         truth_results,
         measurements,
         kalman_results,
+        smoothing_results,
     ):
         filtered_state = kalman_result.filtered_state
-        full_residual = cylindrical_full_residual(filtered_state, measurement)
+        smoothed_state = smoothing_result.smoothed_state
+
+        filtered_residual = cylindrical_full_residual(filtered_state, measurement)
+        smoothed_residual = cylindrical_full_residual(smoothed_state, measurement)
 
         truth_r = radial_distance(truth_result.position)
         filtered_r = radial_distance(filtered_state.global_position())
+        smoothed_r = radial_distance(smoothed_state.global_position())
 
         print(
             f"  {kalman_result.layer_name:8s} "
             f"truth_r={truth_r:8.4f} "
             f"filt_r={filtered_r:8.4f} "
-            f"dphi={full_residual[0]: .6f} "
-            f"dz={full_residual[1]: .6f} "
+            f"smooth_r={smoothed_r:8.4f} "
+            f"f_dphi={filtered_residual[0]: .6f} "
+            f"f_dz={filtered_residual[1]: .6f} "
+            f"s_dphi={smoothed_residual[0]: .6f} "
+            f"s_dz={smoothed_residual[1]: .6f} "
             f"chi2={kalman_result.chi2: .4f}"
         )
 
@@ -274,7 +299,10 @@ def main():
         curvature_scale=0.003,
     )
 
+    smoothing_results = smooth_track(kalman_results)
+
     predicted_positions, filtered_positions = extract_state_positions(kalman_results)
+    smoothed_positions_array = smoothed_positions(smoothing_results)
     measured_positions = measurement_positions_from_hits(measurements, detector)
 
     print_summary(
@@ -283,6 +311,7 @@ def main():
         truth_results=truth_results,
         measurements=measurements,
         kalman_results=kalman_results,
+        smoothing_results=smoothing_results,
     )
 
     fig, ax = plot_cylindrical_track_event(
@@ -291,7 +320,8 @@ def main():
         measured_positions=measured_positions,
         predicted_positions=predicted_positions,
         filtered_positions=filtered_positions,
-        title="OpenReco v0: bound-state EKF in uniform B with cylindrical layers",
+        smoothed_positions=smoothed_positions_array,
+        title="OpenReco v0: bound-state EKF + smoothing in uniform B",
         show_detector=True,
     )
 
