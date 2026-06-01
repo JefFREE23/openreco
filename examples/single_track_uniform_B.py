@@ -11,6 +11,7 @@ It uses:
     - smeared cylindrical measurements [phi, z]
     - truth-assisted initial seed
     - cylindrical EKF Kalman filter
+    - cylindrical detector visualization
 
 This is still a minimal v0 reconstruction chain, not ACTS-level tracking.
 """
@@ -36,6 +37,7 @@ from openreco.measurements import make_cylindrical_measurement
 from openreco.particle_gun import make_fixed_particle
 from openreco.propagation import propagate_to_barrel_detector, radial_distance
 from openreco.state import TrackState
+from openreco.visualization import plot_cylindrical_track_event
 
 
 def make_truth_assisted_seed(
@@ -168,8 +170,11 @@ def print_summary(
 
     print("Layer residuals:")
     print("  Note: Kalman update uses phi. z residual is diagnostic for this v0 state.")
-    for i, (truth_result, measurement, kalman_result) in enumerate(
-        zip(truth_results, measurements, kalman_results)
+
+    for truth_result, measurement, kalman_result in zip(
+        truth_results,
+        measurements,
+        kalman_results,
     ):
         filtered_state = kalman_result.filtered_state
         full_residual = cylindrical_full_residual(filtered_state, measurement)
@@ -185,60 +190,6 @@ def print_summary(
             f"dz={full_residual[1]: .6f} "
             f"chi2={kalman_result.chi2: .4f}"
         )
-
-
-def plot_event(
-    truth_positions,
-    measured_positions,
-    predicted_positions,
-    filtered_positions,
-):
-    """
-    Plot truth, measured hits, predicted states, and filtered states.
-    """
-
-    fig = plt.figure(figsize=(9, 7))
-    ax = fig.add_subplot(111, projection="3d")
-
-    ax.plot(
-        truth_positions[:, 0],
-        truth_positions[:, 1],
-        truth_positions[:, 2],
-        marker="o",
-        label="truth trajectory",
-    )
-
-    ax.scatter(
-        measured_positions[:, 0],
-        measured_positions[:, 1],
-        measured_positions[:, 2],
-        label="smeared measurements",
-    )
-
-    ax.plot(
-        predicted_positions[:, 0],
-        predicted_positions[:, 1],
-        predicted_positions[:, 2],
-        marker="x",
-        label="predicted states",
-    )
-
-    ax.plot(
-        filtered_positions[:, 0],
-        filtered_positions[:, 1],
-        filtered_positions[:, 2],
-        marker="s",
-        label="filtered states",
-    )
-
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_zlabel("z")
-    ax.set_title("OpenReco v0: single track in uniform B with cylindrical layers")
-    ax.legend()
-
-    plt.tight_layout()
-    plt.show()
 
 
 def main():
@@ -311,12 +262,17 @@ def main():
         kalman_results=kalman_results,
     )
 
-    plot_event(
+    fig, ax = plot_cylindrical_track_event(
+        detector=detector,
         truth_positions=truth_positions,
         measured_positions=measured_positions,
         predicted_positions=predicted_positions,
         filtered_positions=filtered_positions,
+        title="OpenReco v0: single track in uniform B with cylindrical layers",
+        show_detector=True,
     )
+
+    plt.show()
 
 
 if __name__ == "__main__":
