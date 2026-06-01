@@ -162,3 +162,35 @@ def test_plot_cylindrical_track_event_rejects_bad_positions():
             truth_positions=truth_positions,
             measured_positions=measured_positions,
         )
+def test_plot_cylindrical_track_event_with_smoothed_positions():
+    detector = make_barrel_detector(
+        radii=[10.0, 20.0, 30.0],
+        half_length=50.0,
+    )
+
+    truth_positions = np.array(
+        [
+            [10.0, 0.0, 1.0],
+            [20.0, 0.0, 2.0],
+            [30.0, 0.0, 3.0],
+        ]
+    )
+
+    measured_positions = truth_positions.copy()
+    predicted_positions = truth_positions.copy()
+    filtered_positions = truth_positions.copy()
+    smoothed_positions = truth_positions.copy()
+
+    fig, ax = plot_cylindrical_track_event(
+        detector=detector,
+        truth_positions=truth_positions,
+        measured_positions=measured_positions,
+        predicted_positions=predicted_positions,
+        filtered_positions=filtered_positions,
+        smoothed_positions=smoothed_positions,
+    )
+
+    assert fig is not None
+    assert ax is not None
+
+    plt.close(fig)
