@@ -485,3 +485,20 @@ multi-event validation
 ```
 
 The main remaining limitation is not whether the loop exists. It does. The next challenge is calibration and validation against external truth data.
+
+
+## References and Inspiration
+
+OpenReco v0 is inspired by standard charged-particle track reconstruction theory and modern tracking software architecture.
+
+- R. Frühwirth, *Track and Vertex Fitting*  
+  Theory reference for track states, covariance matrices, measurement errors, Kalman filtering, smoothing, residuals, pulls, and uncertainty validation.  
+  https://cds.cern.ch/record/340476/files/p217.pdf
+
+- ACTS Collaboration, *A Common Tracking Software Project*  
+  Architecture reference for surface-based geometry, bound track parameters, propagation, seeding, track fitting, and validation workflows.  
+  https://doi.org/10.1007/s41781-021-00078-8
+
+- ACTS GitHub Repository  
+  Open-source tracking software project used as an architectural reference, not copied or replaced by OpenReco.  
+  https://github.com/acts-project/acts
