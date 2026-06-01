@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 import matplotlib.pyplot as plt
 
+from openreco.geometry import CylindricalLayer, make_barrel_detector
 from openreco.visualization import (
     _validate_positions,
     draw_barrel_detector,
