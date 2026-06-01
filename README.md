@@ -10,7 +10,7 @@ particle gun
 → cylindrical detector layers
 → smeared surface measurements
 → truth-assisted seed
-→ bound-state EKF prediction/update
+→ bound-state EKF-style prediction/update
 → RTS-style smoothing
 → residuals, pulls, chi-square, momentum estimate, uncertainty estimate
 ```
@@ -31,7 +31,7 @@ particle gun event source ✅
 uniform Bz magnetic field ✅
 smeared cylindrical measurements [phi, z] ✅
 truth-assisted seed ✅
-bound-state EKF prediction/update ✅
+bound-state EKF-style prediction/update ✅
 2D local measurement update [phi, z] ✅
 RTS-style backward smoothing ✅
 residuals ✅
@@ -138,7 +138,7 @@ The geometry is intentionally small so that the Kalman filter and covariance beh
 
 ---
 
-### Magnetic field and propagation
+### Magnetic field, propagation, and prediction model
 
 OpenReco v0 uses a homogeneous magnetic field along z:
 
@@ -146,7 +146,62 @@ OpenReco v0 uses a homogeneous magnetic field along z:
 B = [0, 0, Bz]
 ```
 
-The current propagator is a minimal helix-like propagator in a uniform Bz field. It supports cylindrical layer intersection and preserves basic uniform-field behavior.
+The Kalman prediction step is based on a simple surface-to-surface propagation model.
+
+For a cylindrical bound state on layer `k`,
+
+```text
+x_k = [phi, z, alpha, tan_lambda, q_over_p]
+```
+
+OpenReco first converts the bound state into a free particle-like representation:
+
+```text
+p  = 1 / |q_over_p|
+pt = p / sqrt(1 + tan_lambda²)
+pz = pt * tan_lambda
+px = pt * cos(alpha)
+py = pt * sin(alpha)
+```
+
+The particle is then propagated in the transverse plane using a minimal helix-like model in a uniform `Bz` field:
+
+```text
+kappa  = curvature_scale * q * Bz / pt
+phi(s) = phi0 + kappa * s
+```
+
+where `s` is transverse path length.
+
+For nonzero curvature, the transverse position is propagated as:
+
+```text
+x(s) = x0 + [sin(phi(s)) - sin(phi0)] / kappa
+y(s) = y0 - [cos(phi(s)) - cos(phi0)] / kappa
+z(s) = z0 + (pz / pt) * s
+```
+
+The next cylindrical layer intersection is found by scanning and bisection until:
+
+```text
+sqrt(x(s)^2 + y(s)^2) = R_layer
+```
+
+The propagated free state is then converted back into a bound state on the next cylindrical surface:
+
+```text
+[phi, z, alpha, tan_lambda, q_over_p]
+```
+
+The transport Jacobian `F_k` used for covariance propagation is computed numerically by central finite differences:
+
+```text
+C_k^- = F_k C_{k-1} F_k^T + Q_k
+```
+
+This is why the filter is described as EKF-style: the local measurement update is linear in the chosen bound coordinates, but the surface-to-surface prediction model is nonlinear.
+
+The current unit convention is simplified and toy-consistent. More realistic HEP unit handling is future work.
 
 The propagation tests verify that:
 
@@ -159,8 +214,6 @@ momentum magnitude is conserved
 pz is conserved
 propagation reaches the requested cylinder radii
 ```
-
-The current unit convention is simplified and toy-consistent. More realistic unit handling is future work.
 
 ---
 
@@ -187,7 +240,7 @@ This is intentional. The first goal is to validate the tracking core. Real tripl
 
 ### Kalman filter
 
-The EKF loop performs:
+The EKF-style loop performs:
 
 ```text
 prediction to next cylindrical layer
@@ -195,6 +248,12 @@ covariance propagation using numerical transport Jacobian
 2D local measurement update with [phi, z]
 chi-square calculation
 residual covariance calculation
+```
+
+The measurement update is linear in the selected cylindrical bound coordinates:
+
+```text
+h(x) = [phi, z]
 ```
 
 The update uses the local measurement matrix:
@@ -209,6 +268,16 @@ because the bound state is:
 
 ```text
 [phi, z, alpha, tan_lambda, q_over_p]
+```
+
+The nonlinear part is the propagation between cylindrical surfaces. The transport Jacobian is computed numerically and used in the covariance prediction.
+
+So “EKF-style” here means:
+
+```text
+nonlinear surface-to-surface prediction
+linear local measurement update
+numerical transport Jacobian
 ```
 
 ---
@@ -246,7 +315,7 @@ generates one charged particle
 propagates truth to cylindrical layers
 creates smeared [phi, z] measurements
 builds a truth-assisted seed
-runs bound-state EKF filtering
+runs bound-state EKF-style filtering
 runs backward smoothing
 prints residuals, pulls, chi-square, covariance validity
 prints momentum estimate and uncertainty
@@ -315,11 +384,26 @@ Interpretation:
 success rate is good
 covariance validity is good
 pull means are close to zero
-pull widths are below 1
+pull widths are clearly below 1
 momentum error is small
 ```
 
-The pull widths below 1 suggest that the current covariance/noise model is conservative or not perfectly calibrated. This is acceptable for v0, but uncertainty calibration is future work.
+The pull widths below 1 are a known v0 calibration issue, especially for `phi`.
+
+This suggests that the current residual covariance is conservative or not perfectly calibrated. Possible causes include:
+
+```text
+measurement noise is too large relative to the generated residuals
+process noise is too large
+seed covariance is too conservative
+transport/covariance propagation is overestimating uncertainty
+truth-assisted seeding makes the fit easier than a real seeded track
+the toy setup has no material, no scattering, no misalignment
+```
+
+This is not a reconstruction failure. It is exactly the kind of issue that pull validation is supposed to reveal.
+
+A future calibration step should tune the measurement noise, process noise, and seed covariance so that pull widths approach 1 in a statistically meaningful multi-event sample.
 
 ---
 
