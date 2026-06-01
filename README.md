@@ -1,4 +1,4 @@
-# OpenReco
+# OpenReco: Open-Source Detector Reconstruction Framework
 
 OpenReco is a minimal charged-particle track reconstruction prototype.
 
