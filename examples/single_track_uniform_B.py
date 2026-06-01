@@ -10,7 +10,7 @@ It uses:
     - truth propagation through cylindrical layers
     - smeared cylindrical measurements [phi, z]
     - truth-assisted initial seed
-    - cylindrical EKF Kalman filter
+    - surface-bound cylindrical EKF Kalman filter
     - cylindrical detector visualization
 
 This is still a minimal v0 reconstruction chain, not ACTS-level tracking.
@@ -25,6 +25,12 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import numpy as np
 import matplotlib.pyplot as plt
 
+from openreco.diagnostics import (
+    covariance_is_valid,
+    format_vector,
+    kalman_pull_summary,
+    momentum_summary,
+)
 from openreco.field import UniformMagneticField
 from openreco.geometry import make_barrel_detector
 from openreco.kalman import (
@@ -36,49 +42,58 @@ from openreco.kalman import (
 from openreco.measurements import make_cylindrical_measurement
 from openreco.particle_gun import make_fixed_particle
 from openreco.propagation import propagate_to_barrel_detector, radial_distance
-from openreco.state import TrackState
+from openreco.state import make_cylindrical_state
 from openreco.visualization import plot_cylindrical_track_event
 
 
-def make_truth_assisted_seed(
+def make_truth_assisted_seed_from_first_layer(
     truth_particle,
-    position_sigma=0.2,
-    slope_sigma=0.02,
+    first_truth_result,
+    first_layer,
+    position_sigma_phi=0.002,
+    position_sigma_z=0.2,
+    direction_sigma=0.03,
     q_over_p_sigma=0.05,
 ):
     """
-    Create a simple truth-assisted seed.
+    Create a truth-assisted cylindrical bound seed on the first detector layer.
 
     This is allowed for OpenReco v0.
     Real triplet seeding comes later.
     """
 
-    x, y, z = truth_particle.position
-    px, py, pz = truth_particle.momentum
+    x, y, z = first_truth_result.position
+    px, py, pz = first_truth_result.momentum
 
-    if np.isclose(pz, 0.0):
-        raise ValueError("truth particle pz must not be zero")
+    pt = np.sqrt(px**2 + py**2)
 
-    tx = px / pz
-    ty = py / pz
+    if pt <= 0.0:
+        raise ValueError("truth particle pt must be positive")
+
+    phi = np.arctan2(y, x)
+    alpha = np.arctan2(py, px)
+    tan_lambda = pz / pt
     q_over_p = truth_particle.q_over_p
-
-    parameters = np.array([x, y, tx, ty, q_over_p], dtype=float)
 
     covariance = np.diag(
         [
-            position_sigma**2,
-            position_sigma**2,
-            slope_sigma**2,
-            slope_sigma**2,
+            position_sigma_phi**2,
+            position_sigma_z**2,
+            direction_sigma**2,
+            direction_sigma**2,
             q_over_p_sigma**2,
         ]
     )
 
-    return TrackState(
-        parameters=parameters,
-        covariance=covariance,
+    return make_cylindrical_state(
+        phi=phi,
         z=z,
+        dir0=alpha,
+        dir1=tan_lambda,
+        q_over_p=q_over_p,
+        covariance=covariance,
+        surface_radius=first_layer.radius,
+        surface_name=first_layer.name,
     )
 
 
@@ -91,15 +106,8 @@ def extract_state_positions(results):
     filtered = []
 
     for result in results:
-        predicted_state = result.predicted_state
-        filtered_state = result.filtered_state
-
-        predicted.append(
-            [predicted_state.x, predicted_state.y, predicted_state.z]
-        )
-        filtered.append(
-            [filtered_state.x, filtered_state.y, filtered_state.z]
-        )
+        predicted.append(result.predicted_state.global_position())
+        filtered.append(result.filtered_state.global_position())
 
     return np.array(predicted), np.array(filtered)
 
@@ -150,26 +158,38 @@ def print_summary(
     print()
 
     final_state = kalman_results[-1].filtered_state
-    fitted_q_over_p = final_state.q_over_p
-    fitted_p = 1.0 / abs(fitted_q_over_p)
+    mom = momentum_summary(truth_particle, final_state)
+    pulls = kalman_pull_summary(kalman_results)
 
-    print("Final filtered state:")
-    print(f"  x        = {final_state.x:.4f}")
-    print(f"  y        = {final_state.y:.4f}")
+    print("Final filtered bound state:")
+    print(f"  surface  = {final_state.surface_name}")
+    print(f"  radius   = {final_state.radius:.4f}")
+    print(f"  phi      = {final_state.phi:.6f}")
     print(f"  z        = {final_state.z:.4f}")
-    print(f"  tx       = {final_state.tx:.6f}")
-    print(f"  ty       = {final_state.ty:.6f}")
-    print(f"  q/p      = {fitted_q_over_p:.6f}")
-    print(f"  p est.   = {fitted_p:.4f}")
+    print(f"  alpha    = {final_state.dir0:.6f}")
+    print(f"  tanλ     = {final_state.dir1:.6f}")
+    print(f"  q/p      = {final_state.q_over_p:.6f}")
+    print(f"  global x = {final_state.x:.4f}")
+    print(f"  global y = {final_state.y:.4f}")
+    print()
+
+    print("Momentum estimate:")
+    print(f"  truth p  = {mom.truth_p:.4f}")
+    print(f"  fitted p = {mom.fitted_p:.4f} ± {mom.fitted_sigma_p:.4f}")
+    print(f"  abs err  = {mom.absolute_error:.4f}")
+    print(f"  rel err  = {mom.relative_error:.4f}")
     print()
 
     print("Fit quality:")
-    print(f"  total chi2 = {total_chi2(kalman_results):.4f}")
-    print(f"  n updates  = {len(kalman_results)}")
+    print(f"  total chi2       = {total_chi2(kalman_results):.4f}")
+    print(f"  n updates        = {len(kalman_results)}")
+    print(f"  pull mean [φ,z]  = {format_vector(pulls.mean, precision=4)}")
+    print(f"  pull std  [φ,z]  = {format_vector(pulls.std, precision=4)}")
+    print(f"  covariance valid = {covariance_is_valid(final_state)}")
     print()
 
     print("Layer residuals:")
-    print("  Note: Kalman update uses phi. z residual is diagnostic for this v0 state.")
+    print("  Kalman update uses local cylindrical measurement [phi, z].")
 
     for truth_result, measurement, kalman_result in zip(
         truth_results,
@@ -180,7 +200,7 @@ def print_summary(
         full_residual = cylindrical_full_residual(filtered_state, measurement)
 
         truth_r = radial_distance(truth_result.position)
-        filtered_r = np.sqrt(filtered_state.x**2 + filtered_state.y**2)
+        filtered_r = radial_distance(filtered_state.global_position())
 
         print(
             f"  {kalman_result.layer_name:8s} "
@@ -231,15 +251,18 @@ def main():
         for layer, truth_result in zip(detector.layers, truth_results)
     ]
 
-    initial_state = make_truth_assisted_seed(
+    initial_state = make_truth_assisted_seed_from_first_layer(
         truth_particle=truth_particle,
-        position_sigma=0.2,
-        slope_sigma=0.02,
+        first_truth_result=truth_results[0],
+        first_layer=detector.layers[0],
+        position_sigma_phi=0.002,
+        position_sigma_z=0.2,
+        direction_sigma=0.03,
         q_over_p_sigma=0.05,
     )
 
     process_noise = make_process_noise(
-        [1e-5, 1e-5, 1e-6, 1e-6, 1e-7]
+        [1e-6, 1e-4, 1e-6, 1e-6, 1e-7]
     )
 
     kalman_results = filter_cylindrical_track(
@@ -268,7 +291,7 @@ def main():
         measured_positions=measured_positions,
         predicted_positions=predicted_positions,
         filtered_positions=filtered_positions,
-        title="OpenReco v0: single track in uniform B with cylindrical layers",
+        title="OpenReco v0: bound-state EKF in uniform B with cylindrical layers",
         show_detector=True,
     )
 
