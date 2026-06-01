@@ -12,6 +12,8 @@ Important:
     This is not the final OpenReco v0 demo.
     The final v0 demo will use cylindrical tracker layers and uniform B field.
 """
+from openreco.visualization import plot_cylindrical_track_event
+
 from pathlib import Path
 import sys
 
