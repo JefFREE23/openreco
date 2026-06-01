@@ -45,7 +45,10 @@ from openreco.particle_gun import make_fixed_particle
 from openreco.propagation import propagate_to_barrel_detector, radial_distance
 from openreco.smoothing import smooth_track, smoothed_positions
 from openreco.state import make_cylindrical_state
-from openreco.visualization import plot_cylindrical_track_event
+from openreco.visualization import (
+    plot_cylindrical_track_event,
+    plot_cylindrical_track_xy,
+)
 
 
 def make_truth_assisted_seed_from_first_layer(
@@ -314,7 +317,7 @@ def main():
         smoothing_results=smoothing_results,
     )
 
-    fig, ax = plot_cylindrical_track_event(
+    fig_3d, ax_3d = plot_cylindrical_track_event(
         detector=detector,
         truth_positions=truth_positions,
         measured_positions=measured_positions,
@@ -323,6 +326,21 @@ def main():
         smoothed_positions=smoothed_positions_array,
         title="OpenReco v0: bound-state EKF + smoothing in uniform B",
         show_detector=True,
+        detector_z_range=(0.0, 70.0),
+        show_beamline=True,
+        show_origin=True,
+    )
+
+    fig_xy, ax_xy = plot_cylindrical_track_xy(
+        detector=detector,
+        truth_positions=truth_positions,
+        measured_positions=measured_positions,
+        predicted_positions=predicted_positions,
+        filtered_positions=filtered_positions,
+        smoothed_positions=smoothed_positions_array,
+        title="OpenReco v0: x-y top view of magnetic bending",
+        show_detector=True,
+        show_origin=True,
     )
 
     plt.show()
