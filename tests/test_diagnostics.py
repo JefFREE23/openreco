@@ -22,6 +22,7 @@ from openreco.diagnostics import (
     measurement_covariance_pulls,
     momentum_from_state,
     momentum_summary,
+    momentum_uncertainty_from_state,
     reduced_chi2,
     summarize_vectors,
     total_chi2,
@@ -29,14 +30,19 @@ from openreco.diagnostics import (
 from openreco.kalman import update_with_cylindrical_measurement
 from openreco.measurements import Measurement
 from openreco.particle_gun import Particle
-from openreco.state import TrackState
+from openreco.state import TrackState, make_cylindrical_state
 
 
 def make_test_state():
-    return TrackState(
-        parameters=np.array([10.0, 0.0, 0.1, 0.0, 0.5]),
-        covariance=np.eye(5),
+    return make_cylindrical_state(
+        phi=0.0,
         z=5.0,
+        dir0=0.0,
+        dir1=1.0,
+        q_over_p=0.5,
+        covariance=np.eye(5),
+        surface_radius=10.0,
+        surface_name="barrel_0",
     )
 
 
@@ -82,7 +88,7 @@ def test_kalman_residuals():
 
     residuals = kalman_residuals([result])
 
-    assert residuals.shape == (1, 1)
+    assert residuals.shape == (1, 2)
     np.testing.assert_allclose(residuals[0], result.residual)
 
 
@@ -96,7 +102,7 @@ def test_kalman_residual_variances():
 
     variances = kalman_residual_variances([result])
 
-    assert variances.shape == (1, 1)
+    assert variances.shape == (1, 2)
     np.testing.assert_allclose(
         variances[0],
         np.diag(result.residual_covariance),
@@ -119,7 +125,7 @@ def test_kalman_residual_summary():
     summary = kalman_residual_summary([result])
 
     assert isinstance(summary, VectorSummary)
-    assert summary.mean.shape == (1,)
+    assert summary.mean.shape == (2,)
 
 
 def test_kalman_pull_summary():
@@ -128,7 +134,7 @@ def test_kalman_pull_summary():
     summary = kalman_pull_summary([result])
 
     assert isinstance(summary, VectorSummary)
-    assert summary.mean.shape == (1,)
+    assert summary.mean.shape == (2,)
 
 
 def test_chi2_values_and_total_chi2():
@@ -149,7 +155,9 @@ def test_chi2_values_rejects_empty_results():
 def test_reduced_chi2():
     result = make_test_result()
 
-    assert reduced_chi2([result], n_degrees_of_freedom=1) == pytest.approx(result.chi2)
+    assert reduced_chi2([result], n_degrees_of_freedom=2) == pytest.approx(
+        result.chi2 / 2.0
+    )
 
 
 def test_reduced_chi2_rejects_non_positive_ndof():
@@ -166,14 +174,35 @@ def test_momentum_from_state():
 
 
 def test_momentum_from_state_rejects_zero_q_over_p():
-    state = TrackState(
-        parameters=np.array([10.0, 0.0, 0.1, 0.0, 0.0]),
-        covariance=np.eye(5),
+    state = make_cylindrical_state(
+        phi=0.0,
         z=5.0,
+        dir0=0.0,
+        dir1=1.0,
+        q_over_p=0.0,
+        covariance=np.eye(5),
+        surface_radius=10.0,
     )
 
     with pytest.raises(ValueError):
         momentum_from_state(state)
+
+
+def test_momentum_uncertainty_from_state():
+    covariance = np.eye(5)
+    covariance[4, 4] = 0.1**2
+
+    state = make_cylindrical_state(
+        phi=0.0,
+        z=5.0,
+        dir0=0.0,
+        dir1=1.0,
+        q_over_p=0.5,
+        covariance=covariance,
+        surface_radius=10.0,
+    )
+
+    assert momentum_uncertainty_from_state(state) == pytest.approx(0.4)
 
 
 def test_momentum_summary():
@@ -183,10 +212,14 @@ def test_momentum_summary():
         charge=1.0,
     )
 
-    state = TrackState(
-        parameters=np.array([10.0, 0.0, 0.1, 0.0, 0.5]),
-        covariance=np.eye(5),
+    state = make_cylindrical_state(
+        phi=0.0,
         z=5.0,
+        dir0=0.0,
+        dir1=1.0,
+        q_over_p=0.5,
+        covariance=np.eye(5) * 0.01,
+        surface_radius=10.0,
     )
 
     summary = momentum_summary(particle, state)
@@ -194,6 +227,7 @@ def test_momentum_summary():
     assert isinstance(summary, MomentumSummary)
     assert summary.truth_p == pytest.approx(1.0)
     assert summary.fitted_p == pytest.approx(2.0)
+    assert summary.fitted_sigma_p == pytest.approx(0.4)
     assert summary.absolute_error == pytest.approx(1.0)
     assert summary.relative_error == pytest.approx(1.0)
 
@@ -205,10 +239,14 @@ def test_covariance_diagonal():
 
 
 def test_covariance_standard_deviations():
-    state = TrackState(
-        parameters=np.array([10.0, 0.0, 0.1, 0.0, 0.5]),
-        covariance=np.diag([1.0, 4.0, 9.0, 16.0, 25.0]),
+    state = make_cylindrical_state(
+        phi=0.0,
         z=5.0,
+        dir0=0.0,
+        dir1=1.0,
+        q_over_p=0.5,
+        covariance=np.diag([1.0, 4.0, 9.0, 16.0, 25.0]),
+        surface_radius=10.0,
     )
 
     np.testing.assert_allclose(
@@ -259,14 +297,16 @@ def test_covariance_is_valid_detects_non_psd_covariance():
     covariance[0, 0] = -1.0
 
     state = TrackState(
-        parameters=np.array([10.0, 0.0, 0.1, 0.0, 0.5]),
+        parameters=np.array([0.0, 5.0, 0.0, 1.0, 0.5]),
         covariance=covariance,
-        z=5.0,
+        surface_type="cylinder",
+        surface_radius=10.0,
     )
 
     assert not covariance_has_nonnegative_diagonal(state)
     assert not covariance_is_positive_semidefinite(state)
     assert not covariance_is_valid(state)
+
 
 def test_cylindrical_diagnostic_residuals():
     result = make_test_result()
