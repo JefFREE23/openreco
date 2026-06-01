@@ -1,26 +1,31 @@
 """
 Kalman filter tools for OpenReco.
 
-This module implements a minimal cylindrical EKF-style Kalman core for
-OpenReco v0.
+This module implements a minimal surface-bound cylindrical EKF for OpenReco v0.
 
 Roadmap intent:
-    - state on a reference surface
-    - covariance propagation
-    - prediction through a magnetic field
-    - measurement update
+    - 5D state on a reference surface
+    - 5x5 covariance
+    - prediction through a homogeneous magnetic field
+    - measurements attached to detector surfaces
+    - Kalman update in local measurement space
     - residuals and chi-square
 
-Important:
-    The final OpenReco v0 demo uses cylindrical tracker layers.
+Cylindrical bound state convention:
+    parameters = [phi, z, alpha, tan_lambda, q_over_p]
 
-Current v0 simplification:
-    TrackState stores [x, y, tx, ty, q_over_p] and keeps z separately.
-    Therefore, cylindrical measurements [phi, z] are handled as:
-        - phi: used in the Kalman update
-        - z: available for diagnostics, but not used to update covariance
+where:
+    phi        = local angular coordinate on the cylinder
+    z          = longitudinal coordinate on the cylinder
+    alpha      = transverse momentum direction angle
+    tan_lambda = pz / pt
+    q_over_p   = charge / momentum
 
-This avoids pretending that z is part of the 5D covariance when it is not.
+Cylindrical measurement convention:
+    measurement = [phi, z]
+
+This means the cylindrical Kalman update now uses both local coordinates:
+    [phi, z]
 """
 
 from dataclasses import dataclass
@@ -32,12 +37,8 @@ from openreco.field import UniformMagneticField
 from openreco.geometry import BarrelDetector, CylindricalLayer
 from openreco.measurements import Measurement
 from openreco.particle_gun import Particle
-from openreco.propagation import (
-    PropagationResult,
-    propagate_to_cylindrical_layer,
-    radial_distance,
-)
-from openreco.state import TrackState
+from openreco.propagation import PropagationResult, propagate_to_cylindrical_layer
+from openreco.state import TrackState, make_cylindrical_state
 
 
 @dataclass(frozen=True)
@@ -127,20 +128,21 @@ def wrap_angle(angle: float) -> float:
 
 def state_to_particle(state: TrackState) -> Particle:
     """
-    Convert a TrackState into a truth-like Particle approximation.
+    Convert a cylindrical bound TrackState into a Particle-like free state.
 
-    TrackState:
-        [x, y, tx, ty, q_over_p]
+    Bound state:
+        [phi, z, alpha, tan_lambda, q_over_p]
 
-    Slopes:
-        tx = px / pz
-        ty = py / pz
-
-    The momentum magnitude is estimated from q_over_p:
+    Momentum:
         p = 1 / abs(q_over_p)
-
-    The charge sign is taken from q_over_p.
+        pt = p / sqrt(1 + tan_lambda^2)
+        pz = pt * tan_lambda
+        px = pt * cos(alpha)
+        py = pt * sin(alpha)
     """
+
+    if state.surface_type != "cylinder":
+        raise ValueError("state_to_particle currently requires a cylindrical state")
 
     if np.isclose(state.q_over_p, 0.0):
         raise ValueError("q_over_p must be nonzero for charged-particle propagation")
@@ -148,11 +150,22 @@ def state_to_particle(state: TrackState) -> Particle:
     charge = float(np.sign(state.q_over_p))
     momentum_magnitude = 1.0 / abs(state.q_over_p)
 
-    direction = np.array([state.tx, state.ty, 1.0], dtype=float)
-    direction = direction / np.linalg.norm(direction)
+    alpha = state.dir0
+    tan_lambda = state.dir1
 
-    momentum = momentum_magnitude * direction
-    position = np.array([state.x, state.y, state.z], dtype=float)
+    pt = momentum_magnitude / np.sqrt(1.0 + tan_lambda**2)
+    pz = pt * tan_lambda
+
+    momentum = np.array(
+        [
+            pt * np.cos(alpha),
+            pt * np.sin(alpha),
+            pz,
+        ],
+        dtype=float,
+    )
+
+    position = state.global_position()
 
     return Particle(
         position=position,
@@ -161,44 +174,48 @@ def state_to_particle(state: TrackState) -> Particle:
     )
 
 
-def propagation_result_to_state(
+def propagation_result_to_cylindrical_state(
     propagation_result: PropagationResult,
     q_over_p: float,
+    layer: CylindricalLayer,
+    covariance: np.ndarray,
 ) -> TrackState:
     """
-    Convert a PropagationResult back into a TrackState.
+    Convert a propagation result to a cylindrical bound TrackState.
+
+    Output state:
+        [phi, z, alpha, tan_lambda, q_over_p]
     """
 
+    x, y, z = propagation_result.position
     px, py, pz = propagation_result.momentum
 
-    if np.isclose(pz, 0.0):
-        raise ValueError("cannot create TrackState from momentum with pz close to zero")
+    pt = np.sqrt(px**2 + py**2)
 
-    x, y, z = propagation_result.position
+    if pt <= 0.0:
+        raise ValueError("cannot create bound state with zero transverse momentum")
 
-    parameters = np.array(
-        [
-            x,
-            y,
-            px / pz,
-            py / pz,
-            q_over_p,
-        ],
-        dtype=float,
-    )
+    phi = np.arctan2(y, x)
+    alpha = np.arctan2(py, px)
+    tan_lambda = pz / pt
 
-    covariance = np.eye(5)
-
-    return TrackState(
-        parameters=parameters,
-        covariance=covariance,
+    return make_cylindrical_state(
+        phi=phi,
         z=z,
+        dir0=alpha,
+        dir1=tan_lambda,
+        q_over_p=q_over_p,
+        covariance=covariance,
+        surface_radius=layer.radius,
+        surface_name=layer.name,
     )
 
 
-def _propagate_state_parameters_only(
+def _propagate_bound_parameters_only(
     parameters: np.ndarray,
-    z: float,
+    covariance: np.ndarray,
+    surface_radius: float,
+    surface_name: str,
     field: UniformMagneticField,
     layer: CylindricalLayer,
     curvature_scale: float,
@@ -211,8 +228,10 @@ def _propagate_state_parameters_only(
 
     dummy_state = TrackState(
         parameters=np.asarray(parameters, dtype=float),
-        covariance=np.eye(5),
-        z=z,
+        covariance=covariance,
+        surface_type="cylinder",
+        surface_name=surface_name,
+        surface_radius=surface_radius,
     )
 
     particle = state_to_particle(dummy_state)
@@ -226,9 +245,11 @@ def _propagate_state_parameters_only(
         n_scan=n_scan,
     )
 
-    propagated_state = propagation_result_to_state(
+    propagated_state = propagation_result_to_cylindrical_state(
         propagation_result=propagation_result,
         q_over_p=dummy_state.q_over_p,
+        layer=layer,
+        covariance=np.eye(5),
     )
 
     return propagated_state.parameters
@@ -268,7 +289,16 @@ def numerical_jacobian(
         output_plus = np.asarray(function(plus), dtype=float)
         output_minus = np.asarray(function(minus), dtype=float)
 
-        jacobian[:, i] = (output_plus - output_minus) / (2.0 * step)
+        difference = output_plus - output_minus
+
+        # phi and alpha are angular coordinates.
+        if difference.shape[0] >= 1:
+            difference[0] = wrap_angle(difference[0])
+
+        if difference.shape[0] >= 3:
+            difference[2] = wrap_angle(difference[2])
+
+        jacobian[:, i] = difference / (2.0 * step)
 
     return jacobian
 
@@ -284,15 +314,15 @@ def predict_to_cylindrical_layer(
     jacobian_step: float = 1e-5,
 ) -> KalmanPredictionResult:
     """
-    Predict a TrackState to a cylindrical layer.
+    Predict a cylindrical bound TrackState to another cylindrical layer.
 
-    This is the EKF prediction step:
-
+    EKF prediction:
         x_k^- = f_k(x_{k-1})
         C_k^- = F_k C_{k-1} F_k^T + Q_k
-
-    where F_k is computed numerically.
     """
+
+    if state.surface_type != "cylinder":
+        raise ValueError("predict_to_cylindrical_layer requires a cylindrical state")
 
     particle = state_to_particle(state)
 
@@ -305,15 +335,19 @@ def predict_to_cylindrical_layer(
         n_scan=n_scan,
     )
 
-    predicted_state_without_covariance = propagation_result_to_state(
+    predicted_state_without_covariance = propagation_result_to_cylindrical_state(
         propagation_result=propagation_result,
         q_over_p=state.q_over_p,
+        layer=layer,
+        covariance=np.eye(5),
     )
 
     def propagation_function(parameters: np.ndarray) -> np.ndarray:
-        return _propagate_state_parameters_only(
+        return _propagate_bound_parameters_only(
             parameters=parameters,
-            z=state.z,
+            covariance=np.eye(5),
+            surface_radius=state.radius,
+            surface_name=state.surface_name,
             field=field,
             layer=layer,
             curvature_scale=curvature_scale,
@@ -327,9 +361,7 @@ def predict_to_cylindrical_layer(
         step=jacobian_step,
     )
 
-    predicted_covariance = (
-        transport_jacobian @ state.covariance @ transport_jacobian.T
-    )
+    predicted_covariance = transport_jacobian @ state.covariance @ transport_jacobian.T
 
     if process_noise is not None:
         process_noise = np.asarray(process_noise, dtype=float)
@@ -342,14 +374,17 @@ def predict_to_cylindrical_layer(
 
         predicted_covariance = predicted_covariance + process_noise
 
-    predicted_covariance = 0.5 * (
-        predicted_covariance + predicted_covariance.T
-    )
+    predicted_covariance = 0.5 * (predicted_covariance + predicted_covariance.T)
 
-    predicted_state = TrackState(
-        parameters=predicted_state_without_covariance.parameters,
-        covariance=predicted_covariance,
+    predicted_state = make_cylindrical_state(
+        phi=predicted_state_without_covariance.phi,
         z=predicted_state_without_covariance.z,
+        dir0=predicted_state_without_covariance.dir0,
+        dir1=predicted_state_without_covariance.dir1,
+        q_over_p=predicted_state_without_covariance.q_over_p,
+        covariance=predicted_covariance,
+        surface_radius=layer.radius,
+        surface_name=layer.name,
     )
 
     return KalmanPredictionResult(
@@ -359,42 +394,32 @@ def predict_to_cylindrical_layer(
     )
 
 
-def cylindrical_phi_prediction(state: TrackState) -> np.ndarray:
+def cylindrical_measurement_prediction(state: TrackState) -> np.ndarray:
     """
-    Predict cylindrical phi measurement.
-
-    Current update measurement:
-        [phi]
-
-    The full cylindrical hit may contain [phi, z], but z is diagnostic only
-    for this 5D TrackState representation.
+    Predict cylindrical measurement [phi, z].
     """
 
-    phi = np.arctan2(state.y, state.x)
+    if state.surface_type != "cylinder":
+        raise ValueError("cylindrical measurement prediction requires cylindrical state")
 
-    return np.array([phi], dtype=float)
+    return np.array([state.phi, state.z], dtype=float)
 
 
-def cylindrical_phi_jacobian(state: TrackState) -> np.ndarray:
+def cylindrical_measurement_matrix() -> np.ndarray:
     """
-    Measurement Jacobian for cylindrical phi.
+    Measurement matrix for cylindrical local measurement [phi, z].
 
-    h(x) = atan2(y, x)
-
-    State vector:
-        [x, y, tx, ty, q_over_p]
+    Bound state:
+        [phi, z, alpha, tan_lambda, q_over_p]
     """
 
-    radius_squared = state.x**2 + state.y**2
-
-    if radius_squared <= 0.0:
-        raise ValueError("cannot compute phi Jacobian at x=y=0")
-
-    jacobian = np.zeros((1, 5), dtype=float)
-    jacobian[0, 0] = -state.y / radius_squared
-    jacobian[0, 1] = state.x / radius_squared
-
-    return jacobian
+    return np.array(
+        [
+            [1.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0, 0.0],
+        ],
+        dtype=float,
+    )
 
 
 def cylindrical_full_residual(
@@ -402,22 +427,21 @@ def cylindrical_full_residual(
     measurement: Measurement,
 ) -> np.ndarray:
     """
-    Return full cylindrical residual [delta_phi, delta_z] for diagnostics.
+    Return full cylindrical residual [delta_phi, delta_z].
     """
 
     if measurement.surface_type != "cylinder":
         raise ValueError("measurement must have surface_type='cylinder'")
 
     if measurement.dimension != 2:
-        raise ValueError("cylindrical diagnostic residual expects [phi, z]")
+        raise ValueError("cylindrical residual expects [phi, z]")
 
-    predicted_phi = np.arctan2(state.y, state.x)
-    predicted_z = state.z
+    prediction = cylindrical_measurement_prediction(state)
 
-    residual_phi = wrap_angle(measurement.values[0] - predicted_phi)
-    residual_z = measurement.values[1] - predicted_z
+    residual = measurement.values - prediction
+    residual[0] = wrap_angle(residual[0])
 
-    return np.array([residual_phi, residual_z], dtype=float)
+    return residual
 
 
 def update_state(
@@ -437,7 +461,7 @@ def update_state(
     K = C H^T S^-1
     x_new = x + K residual
 
-    Joseph covariance form is used for numerical stability:
+    Joseph covariance form:
     C_new = (I - K H) C (I - K H)^T + K V K^T
     """
 
@@ -480,7 +504,13 @@ def update_state(
 
     filtered_parameters = predicted_state.parameters + kalman_gain @ residual
 
+    # Keep angular parameters wrapped.
+    filtered_parameters = filtered_parameters.copy()
+    filtered_parameters[0] = wrap_angle(filtered_parameters[0])
+    filtered_parameters[2] = wrap_angle(filtered_parameters[2])
+
     identity = np.eye(5)
+
     filtered_covariance = (
         (identity - kalman_gain @ h_matrix)
         @ covariance
@@ -488,16 +518,19 @@ def update_state(
         + kalman_gain @ v_matrix @ kalman_gain.T
     )
 
-    filtered_covariance = 0.5 * (
-        filtered_covariance + filtered_covariance.T
-    )
+    filtered_covariance = 0.5 * (filtered_covariance + filtered_covariance.T)
 
     chi2 = float(residual.T @ np.linalg.inv(residual_covariance) @ residual)
 
-    filtered_state = TrackState(
-        parameters=filtered_parameters,
+    filtered_state = make_cylindrical_state(
+        phi=filtered_parameters[0],
+        z=filtered_parameters[1],
+        dir0=filtered_parameters[2],
+        dir1=filtered_parameters[3],
+        q_over_p=filtered_parameters[4],
         covariance=filtered_covariance,
-        z=predicted_state.z,
+        surface_radius=predicted_state.radius,
+        surface_name=predicted_state.surface_name,
     )
 
     return KalmanUpdateResult(
@@ -516,14 +549,11 @@ def update_with_cylindrical_measurement(
     measurement: Measurement,
 ) -> KalmanUpdateResult:
     """
-    Update a predicted TrackState using a cylindrical measurement.
-
-    The stored cylindrical measurement is [phi, z].
-    The Kalman update uses phi only because z is not part of the current
-    5D TrackState covariance.
-
-    z residual can still be inspected using cylindrical_full_residual().
+    Update a predicted cylindrical TrackState using a [phi, z] measurement.
     """
+
+    if predicted_state.surface_type != "cylinder":
+        raise ValueError("predicted_state must be cylindrical")
 
     if measurement.surface_type != "cylinder":
         raise ValueError("measurement must have surface_type='cylinder'")
@@ -531,15 +561,12 @@ def update_with_cylindrical_measurement(
     if measurement.dimension != 2:
         raise ValueError("cylindrical measurement must have dimension 2: [phi, z]")
 
-    phi_value = np.array([measurement.values[0]], dtype=float)
-    phi_covariance = np.array([[measurement.covariance[0, 0]]], dtype=float)
-
     return update_state(
         predicted_state=predicted_state,
-        measurement_values=phi_value,
-        measurement_covariance=phi_covariance,
-        measurement_matrix=cylindrical_phi_jacobian(predicted_state),
-        predicted_measurement=cylindrical_phi_prediction(predicted_state),
+        measurement_values=measurement.values,
+        measurement_covariance=measurement.covariance,
+        measurement_matrix=cylindrical_measurement_matrix(),
+        predicted_measurement=cylindrical_measurement_prediction(predicted_state),
         layer_name=measurement.layer_name,
         wrap_first_residual=True,
     )
@@ -559,9 +586,9 @@ def filter_cylindrical_track(
     Run a cylindrical EKF over a BarrelDetector.
 
     For each layer:
-        1. propagate current state to the cylindrical layer
+        1. propagate current bound state to the cylindrical layer
         2. propagate covariance with numerical transport Jacobian
-        3. update with the cylindrical phi measurement
+        3. update with local measurement [phi, z]
     """
 
     measurements = list(measurements)
