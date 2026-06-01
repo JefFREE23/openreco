@@ -24,24 +24,24 @@ OpenReco v0 uses a simple cylindrical tracker and a homogeneous magnetic field a
 OpenReco v0 currently includes:
 
 ```text
-5D surface-bound track state ✅
-5×5 covariance matrix ✅
-cylindrical detector layers ✅
-particle gun event source ✅
-uniform Bz magnetic field ✅
-smeared cylindrical measurements [phi, z] ✅
-truth-assisted seed ✅
-bound-state EKF-style prediction/update ✅
-2D local measurement update [phi, z] ✅
-RTS-style backward smoothing ✅
-residuals ✅
-Kalman pulls using residual covariance ✅
-chi-square summaries ✅
-momentum estimate ✅
-momentum uncertainty estimate ✅
-covariance validity checks ✅
-multi-event validation ✅
-3D and x-y visualization ✅
+5D surface-bound track state 
+5×5 covariance matrix 
+cylindrical detector layers 
+particle gun event source 
+uniform Bz magnetic field 
+smeared cylindrical measurements [phi, z] 
+truth-assisted seed 
+bound-state EKF-style prediction/update 
+2D local measurement update [phi, z] 
+RTS-style backward smoothing 
+residuals 
+Kalman pulls using residual covariance 
+chi-square summaries 
+momentum estimate 
+momentum uncertainty estimate 
+covariance validity checks 
+multi-event validation 
+3D and x-y visualization 
 ```
 
 The current full test suite passes:
