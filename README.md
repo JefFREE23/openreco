@@ -500,5 +500,5 @@ OpenReco v0 is inspired by standard charged-particle track reconstruction theory
   https://doi.org/10.1007/s41781-021-00078-8
 
 - ACTS GitHub Repository  
-  Open-source tracking software project used as an architectural reference, not copied or replaced by OpenReco.  
+  Open-source tracking software project used as an architectural reference
   https://github.com/acts-project/acts
