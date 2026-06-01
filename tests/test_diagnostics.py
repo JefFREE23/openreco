@@ -254,17 +254,19 @@ def test_covariance_is_valid():
     assert covariance_is_valid(state)
 
 
-def test_covariance_is_valid_rejects_non_psd_covariance():
+def test_covariance_is_valid_detects_non_psd_covariance():
     covariance = np.eye(5)
     covariance[0, 0] = -1.0
 
-    with pytest.raises(ValueError):
-        TrackState(
-            parameters=np.array([10.0, 0.0, 0.1, 0.0, 0.5]),
-            covariance=covariance,
-            z=5.0,
-        )
+    state = TrackState(
+        parameters=np.array([10.0, 0.0, 0.1, 0.0, 0.5]),
+        covariance=covariance,
+        z=5.0,
+    )
 
+    assert not covariance_has_nonnegative_diagonal(state)
+    assert not covariance_is_positive_semidefinite(state)
+    assert not covariance_is_valid(state)
 
 def test_cylindrical_diagnostic_residuals():
     result = make_test_result()
