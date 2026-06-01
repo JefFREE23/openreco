@@ -300,3 +300,208 @@ def test_propagate_to_barrel_detector():
         [radial_distance(result.position) for result in results],
         np.array([10.0, 20.0, 30.0]),
     )
+
+def azimuth(position):
+    """
+    Return azimuthal angle of a 3D position.
+    """
+    return float(np.arctan2(position[1], position[0]))
+
+
+def test_charge_sign_flips_bending_direction():
+    field = UniformMagneticField(bz=2.0)
+
+    positive = Particle(
+        position=np.zeros(3),
+        momentum=np.array([2.0, 0.0, 1.0]),
+        charge=1.0,
+    )
+
+    negative = Particle(
+        position=np.zeros(3),
+        momentum=np.array([2.0, 0.0, 1.0]),
+        charge=-1.0,
+    )
+
+    s_xy = 30.0
+
+    positive_position = helix_position_at_s(
+        particle=positive,
+        field=field,
+        s_xy=s_xy,
+        curvature_scale=0.03,
+    )
+
+    negative_position = helix_position_at_s(
+        particle=negative,
+        field=field,
+        s_xy=s_xy,
+        curvature_scale=0.03,
+    )
+
+    positive_phi = azimuth(positive_position)
+    negative_phi = azimuth(negative_position)
+
+    assert positive_phi > 0.0
+    assert negative_phi < 0.0
+    assert abs(positive_phi) == pytest.approx(abs(negative_phi), rel=1e-6)
+
+
+def test_bz_sign_flips_bending_direction():
+    particle = Particle(
+        position=np.zeros(3),
+        momentum=np.array([2.0, 0.0, 1.0]),
+        charge=1.0,
+    )
+
+    positive_field = UniformMagneticField(bz=2.0)
+    negative_field = UniformMagneticField(bz=-2.0)
+
+    s_xy = 30.0
+
+    positive_b_position = helix_position_at_s(
+        particle=particle,
+        field=positive_field,
+        s_xy=s_xy,
+        curvature_scale=0.03,
+    )
+
+    negative_b_position = helix_position_at_s(
+        particle=particle,
+        field=negative_field,
+        s_xy=s_xy,
+        curvature_scale=0.03,
+    )
+
+    positive_b_phi = azimuth(positive_b_position)
+    negative_b_phi = azimuth(negative_b_position)
+
+    assert positive_b_phi > 0.0
+    assert negative_b_phi < 0.0
+    assert abs(positive_b_phi) == pytest.approx(abs(negative_b_phi), rel=1e-6)
+
+
+def test_larger_bz_bends_more():
+    particle = Particle(
+        position=np.zeros(3),
+        momentum=np.array([2.0, 0.0, 1.0]),
+        charge=1.0,
+    )
+
+    weak_field = UniformMagneticField(bz=1.0)
+    strong_field = UniformMagneticField(bz=3.0)
+
+    s_xy = 30.0
+
+    weak_position = helix_position_at_s(
+        particle=particle,
+        field=weak_field,
+        s_xy=s_xy,
+        curvature_scale=0.03,
+    )
+
+    strong_position = helix_position_at_s(
+        particle=particle,
+        field=strong_field,
+        s_xy=s_xy,
+        curvature_scale=0.03,
+    )
+
+    assert abs(azimuth(strong_position)) > abs(azimuth(weak_position))
+
+
+def test_lower_pt_bends_more_than_higher_pt():
+    field = UniformMagneticField(bz=2.0)
+
+    low_pt_particle = Particle(
+        position=np.zeros(3),
+        momentum=np.array([1.0, 0.0, 1.0]),
+        charge=1.0,
+    )
+
+    high_pt_particle = Particle(
+        position=np.zeros(3),
+        momentum=np.array([5.0, 0.0, 1.0]),
+        charge=1.0,
+    )
+
+    s_xy = 30.0
+
+    low_pt_position = helix_position_at_s(
+        particle=low_pt_particle,
+        field=field,
+        s_xy=s_xy,
+        curvature_scale=0.03,
+    )
+
+    high_pt_position = helix_position_at_s(
+        particle=high_pt_particle,
+        field=field,
+        s_xy=s_xy,
+        curvature_scale=0.03,
+    )
+
+    assert abs(azimuth(low_pt_position)) > abs(azimuth(high_pt_position))
+
+
+def test_momentum_magnitude_is_conserved_in_uniform_bz():
+    particle = Particle(
+        position=np.zeros(3),
+        momentum=np.array([2.0, 0.5, 1.0]),
+        charge=1.0,
+    )
+
+    field = UniformMagneticField(bz=2.0)
+
+    momentum_after = helix_momentum_at_s(
+        particle=particle,
+        field=field,
+        s_xy=50.0,
+        curvature_scale=0.03,
+    )
+
+    assert np.linalg.norm(momentum_after) == pytest.approx(particle.p)
+
+
+def test_pz_is_conserved_in_uniform_bz():
+    particle = Particle(
+        position=np.zeros(3),
+        momentum=np.array([2.0, 0.5, 1.25]),
+        charge=1.0,
+    )
+
+    field = UniformMagneticField(bz=2.0)
+
+    momentum_after = helix_momentum_at_s(
+        particle=particle,
+        field=field,
+        s_xy=50.0,
+        curvature_scale=0.03,
+    )
+
+    assert momentum_after[2] == pytest.approx(particle.momentum[2])
+
+
+def test_curved_propagation_hits_requested_cylinder_radii():
+    particle = Particle(
+        position=np.zeros(3),
+        momentum=np.array([2.0, 0.25, 1.0]),
+        charge=1.0,
+    )
+
+    field = UniformMagneticField(bz=2.0)
+
+    detector = make_barrel_detector(
+        radii=[10.0, 20.0, 30.0, 40.0],
+        half_length=200.0,
+    )
+
+    results = propagate_to_barrel_detector(
+        particle=particle,
+        field=field,
+        detector=detector,
+        curvature_scale=0.03,
+    )
+
+    for result, layer in zip(results, detector.layers):
+        assert radial_distance(result.position) == pytest.approx(layer.radius)
