@@ -12,6 +12,11 @@ Important:
     This is not the final OpenReco v0 demo.
     The final v0 demo will use cylindrical tracker layers and uniform B field.
 """
+from pathlib import Path
+import sys
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
 
 import numpy as np
 import matplotlib.pyplot as plt
