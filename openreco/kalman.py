@@ -24,7 +24,7 @@ where:
 Cylindrical measurement convention:
     measurement = [phi, z]
 
-This means the cylindrical Kalman update now uses both local coordinates:
+This means the cylindrical Kalman update uses both local coordinates:
     [phi, z]
 """
 
@@ -54,6 +54,7 @@ class KalmanUpdateResult:
     kalman_gain: np.ndarray
     chi2: float
     layer_name: str
+    transport_jacobian: np.ndarray | None = None
 
     def __post_init__(self):
         residual = np.asarray(self.residual, dtype=float)
@@ -76,6 +77,16 @@ class KalmanUpdateResult:
 
         if not isinstance(self.layer_name, str):
             raise TypeError("layer_name must be a string")
+
+        transport_jacobian = self.transport_jacobian
+
+        if transport_jacobian is not None:
+            transport_jacobian = np.asarray(transport_jacobian, dtype=float)
+
+            if transport_jacobian.shape != (5, 5):
+                raise ValueError("transport_jacobian must have shape (5, 5)")
+
+            object.__setattr__(self, "transport_jacobian", transport_jacobian)
 
         object.__setattr__(self, "residual", residual)
         object.__setattr__(self, "residual_covariance", residual_covariance)
@@ -452,6 +463,7 @@ def update_state(
     predicted_measurement: np.ndarray,
     layer_name: str,
     wrap_first_residual: bool = False,
+    transport_jacobian: np.ndarray | None = None,
 ) -> KalmanUpdateResult:
     """
     Perform one Kalman update.
@@ -541,12 +553,14 @@ def update_state(
         kalman_gain=kalman_gain,
         chi2=chi2,
         layer_name=layer_name,
+        transport_jacobian=transport_jacobian,
     )
 
 
 def update_with_cylindrical_measurement(
     predicted_state: TrackState,
     measurement: Measurement,
+    transport_jacobian: np.ndarray | None = None,
 ) -> KalmanUpdateResult:
     """
     Update a predicted cylindrical TrackState using a [phi, z] measurement.
@@ -569,6 +583,7 @@ def update_with_cylindrical_measurement(
         predicted_measurement=cylindrical_measurement_prediction(predicted_state),
         layer_name=measurement.layer_name,
         wrap_first_residual=True,
+        transport_jacobian=transport_jacobian,
     )
 
 
@@ -613,6 +628,7 @@ def filter_cylindrical_track(
         result = update_with_cylindrical_measurement(
             predicted_state=prediction.predicted_state,
             measurement=measurement,
+            transport_jacobian=prediction.transport_jacobian,
         )
 
         results.append(result)
