@@ -1,125 +1,403 @@
 # OpenReco
 
-**Open-source detector event reconstruction framework for particle tracking and uncertainty estimation.**
+OpenReco is a minimal charged-particle track reconstruction prototype.
 
-## Overview
-
-OpenReco is a software framework for reconstructing particle trajectories and physical properties from detector measurements.
-
-In particle physics experiments, detectors do not directly identify particles or determine their properties. Instead, they record a collection of measurements, commonly known as **hits**, as particles pass through detector layers.
+The current v0 goal is not to reproduce a full experiment framework. It is to build the smallest serious tracking loop:
 
 ```text
-Detector Layer 1 → Hit
-Detector Layer 2 → Hit
-Detector Layer 3 → Hit
-Detector Layer 4 → Hit
+particle gun
+→ uniform magnetic field
+→ cylindrical detector layers
+→ smeared surface measurements
+→ truth-assisted seed
+→ bound-state EKF prediction/update
+→ RTS-style smoothing
+→ residuals, pulls, chi-square, momentum estimate, uncertainty estimate
 ```
 
-From these measurements, OpenReco aims to reconstruct:
-
-* The particle's trajectory
-* The particle's momentum
-* The particle type (future development)
-* The uncertainty associated with the reconstruction
-
-The ultimate goal is to transform raw detector data into meaningful physical information.
+OpenReco v0 uses a simple cylindrical tracker and a homogeneous magnetic field along the beam axis. The main purpose is to debug the tracking mathematics before moving to more realistic detector descriptions, ACTS GenericDetector truth samples, ODD samples, or CMS Open Data.
 
 ---
 
-## Features
+## Current v0 status
 
-### Detector Simulation
-
-Construct and simulate a simplified multi-layer particle detector.
+OpenReco v0 currently includes:
 
 ```text
-Particle → Detector → Hits
+5D surface-bound track state ✅
+5×5 covariance matrix ✅
+cylindrical detector layers ✅
+particle gun event source ✅
+uniform Bz magnetic field ✅
+smeared cylindrical measurements [phi, z] ✅
+truth-assisted seed ✅
+bound-state EKF prediction/update ✅
+2D local measurement update [phi, z] ✅
+RTS-style backward smoothing ✅
+residuals ✅
+Kalman pulls using residual covariance ✅
+chi-square summaries ✅
+momentum estimate ✅
+momentum uncertainty estimate ✅
+covariance validity checks ✅
+multi-event validation ✅
+3D and x-y visualization ✅
 ```
 
-### Event Generation
-
-Generate simulated detector events using different particle species.
-
-Examples:
-
-* Electron
-* Muon
-* Pion
-
-### Track Reconstruction
-
-Reconstruct particle trajectories from detector hit information.
+The current full test suite passes:
 
 ```text
-Hits → Trajectory
+197 passed
 ```
 
-### Momentum Estimation
-
-Estimate particle momentum from reconstructed tracks.
-
-### Uncertainty Estimation
-
-Quantify the confidence and uncertainty of reconstructed quantities.
-
 ---
 
-## Why OpenReco?
-
-Particle track reconstruction is one of the fundamental computational challenges in experimental particle physics. Modern experiments rely on sophisticated reconstruction algorithms to convert detector measurements into usable physics observables.
-
-OpenReco is designed as an educational and research-oriented framework that demonstrates the core principles behind detector simulation, event generation, track fitting, momentum estimation, and uncertainty analysis.
-
----
-
-## Detector Measurements
-
-A detector records only the signals produced when a particle interacts with detector layers.
-
-For example:
+## Repository structure
 
 ```text
-Particle
-   ↓
-Layer 1 → hit at (x₁, y₁)
-Layer 2 → hit at (x₂, y₂)
-Layer 3 → hit at (x₃, y₃)
-Layer 4 → hit at (x₄, y₄)
+openreco/
+  state.py
+  geometry.py
+  field.py
+  particle_gun.py
+  propagation.py
+  measurements.py
+  kalman.py
+  smoothing.py
+  diagnostics.py
+  visualization.py
+
+examples/
+  single_track_straight_line.py
+  single_track_uniform_B.py
+  multi_event_validation.py
+
+tests/
+  test_state.py
+  test_geometry.py
+  test_measurements.py
+  test_field.py
+  test_particle_gun.py
+  test_propagation.py
+  test_kalman.py
+  test_diagnostics.py
+  test_visualization.py
+  test_smoothing.py
+  test_end_to_end.py
 ```
 
-The detector does **not** directly know:
+---
 
-* What particle produced the hits
-* The particle's momentum
-* The particle's complete trajectory
+## Core design
 
-It only records measurements such as:
+### Track state
 
-* Position
-* Time
-* Energy deposition
+OpenReco v0 uses a five-parameter bound state on a reference surface:
 
-These measurements form the input data used by OpenReco for reconstruction.
+```text
+[loc0, loc1, dir0, dir1, q_over_p]
+```
+
+For cylindrical detector layers, this becomes:
+
+```text
+[phi, z, alpha, tan_lambda, q_over_p]
+```
+
+where:
+
+```text
+phi        = angular coordinate on the cylinder
+z          = longitudinal coordinate
+alpha      = transverse momentum direction angle
+tan_lambda = pz / pt
+q_over_p   = charge / momentum
+```
+
+Each state carries a 5×5 covariance matrix.
+
+This follows the tracking idea that states and measurements live on detector surfaces, while propagation can use a free/global representation internally.
 
 ---
 
-## Development Roadmap
+### Detector model
 
-### Version 1
+The v0 detector is a simple barrel tracker made from cylindrical layers:
 
-* Phase 1: Detector Simulation
-* Phase 2: Event Generation
-* Phase 3: Track Reconstruction
+```text
+r = 10, 20, 30, 40, 50, 60
+```
 
-### Version 2
+Each cylindrical layer can hold a local measurement:
 
-* Phase 4: Momentum Estimation
-* Phase 5: Uncertainty Estimation
+```text
+[phi, z]
+```
+
+The geometry is intentionally small so that the Kalman filter and covariance behavior can be debugged before adding detector complexity.
 
 ---
 
-## Project Status
+### Magnetic field and propagation
 
-🚧 Early development
+OpenReco v0 uses a homogeneous magnetic field along z:
 
-The initial release focuses on detector simulation, event generation, and basic track reconstruction. Additional physics capabilities will be added in future versions.
+```text
+B = [0, 0, Bz]
+```
+
+The current propagator is a minimal helix-like propagator in a uniform Bz field. It supports cylindrical layer intersection and preserves basic uniform-field behavior.
+
+The propagation tests verify that:
+
+```text
+charge sign flips bending direction
+Bz sign flips bending direction
+larger Bz bends more
+lower pt bends more than higher pt
+momentum magnitude is conserved
+pz is conserved
+propagation reaches the requested cylinder radii
+```
+
+The current unit convention is simplified and toy-consistent. More realistic unit handling is future work.
+
+---
+
+### Measurements
+
+Cylindrical hits are generated by smearing the truth intersection with Gaussian noise:
+
+```text
+measurement = [phi, z]
+covariance  = diag([sigma_phi², sigma_z²])
+```
+
+The Kalman update uses both local coordinates, `phi` and `z`.
+
+---
+
+### Seeding
+
+The current v0 example uses a truth-assisted seed on the first cylindrical layer.
+
+This is intentional. The first goal is to validate the tracking core. Real triplet seeding comes later.
+
+---
+
+### Kalman filter
+
+The EKF loop performs:
+
+```text
+prediction to next cylindrical layer
+covariance propagation using numerical transport Jacobian
+2D local measurement update with [phi, z]
+chi-square calculation
+residual covariance calculation
+```
+
+The update uses the local measurement matrix:
+
+```text
+H =
+[1 0 0 0 0
+ 0 1 0 0 0]
+```
+
+because the bound state is:
+
+```text
+[phi, z, alpha, tan_lambda, q_over_p]
+```
+
+---
+
+### Smoothing
+
+OpenReco v0 includes an RTS-style backward smoother.
+
+For filtered state `k` and predicted state `k+1`, the smoother uses:
+
+```text
+A_k = C_k^f F_{k+1}ᵀ (C_{k+1}^-)⁻¹
+```
+
+and computes smoothed states and covariances by walking backward through the track.
+
+The final smoothed state is equal to the final filtered state, which is expected because there is no later measurement after the last layer.
+
+---
+
+## Main demo
+
+Run:
+
+```powershell
+python examples/single_track_uniform_B.py
+```
+
+This demo:
+
+```text
+creates a cylindrical detector
+creates a uniform Bz field
+generates one charged particle
+propagates truth to cylindrical layers
+creates smeared [phi, z] measurements
+builds a truth-assisted seed
+runs bound-state EKF filtering
+runs backward smoothing
+prints residuals, pulls, chi-square, covariance validity
+prints momentum estimate and uncertainty
+shows a 3D event display
+shows an x-y top view
+```
+
+Example output:
+
+```text
+OpenReco v0 uniform-B cylindrical demo
+--------------------------------------
+Number of cylindrical layers: 6
+Layer radii: [10. 20. 30. 40. 50. 60.]
+
+Momentum estimate from final smoothed state:
+  truth p  = 2.8395
+  fitted p = 2.9712 ± 0.1582
+  abs err  = 0.1317
+  rel err  = 0.0464
+
+Fit quality:
+  total chi2       = 4.4334
+  n updates        = 6
+  pull mean [φ,z]  = [-0.1866, -0.3720]
+  pull std  [φ,z]  = [0.2134, 0.7220]
+  covariance valid = True
+```
+
+The single-event pull values are only a smoke test. Pull distributions need many events.
+
+---
+
+## Multi-event validation
+
+Run:
+
+```powershell
+python examples/multi_event_validation.py
+```
+
+Current 200-event validation result:
+
+```text
+events requested:       200
+events successful:      200
+success rate:           1.0000
+covariance valid rate:  1.0000
+
+Kalman pull summary:
+  phi mean:              0.0041
+  phi std:               0.6263
+  z mean:               -0.0234
+  z std:                 0.8287
+
+Momentum error summary:
+  abs error mean:        0.0074
+  abs error std:         0.0882
+  rel error mean:        0.0026
+  rel error std:         0.0310
+```
+
+Interpretation:
+
+```text
+success rate is good
+covariance validity is good
+pull means are close to zero
+pull widths are below 1
+momentum error is small
+```
+
+The pull widths below 1 suggest that the current covariance/noise model is conservative or not perfectly calibrated. This is acceptable for v0, but uncertainty calibration is future work.
+
+---
+
+## Running tests
+
+Run the full test suite:
+
+```powershell
+python -m pytest tests/test_state.py tests/test_geometry.py tests/test_measurements.py tests/test_field.py tests/test_particle_gun.py tests/test_propagation.py tests/test_kalman.py tests/test_diagnostics.py tests/test_visualization.py tests/test_smoothing.py tests/test_end_to_end.py
+```
+
+Current result:
+
+```text
+197 passed
+```
+
+---
+
+## What is intentionally deferred
+
+OpenReco v0 intentionally does not include:
+
+```text
+vertexing
+full ambiguity resolution
+realistic detector material
+multiple scattering model
+energy loss model
+non-Gaussian electron fitting
+hadronic physics lists
+advanced event generation
+Pythia8
+Geant4 detector simulation
+CMS I/O
+ACTS GenericDetector validation
+ODD validation
+CMS Open Data validation
+```
+
+These are deferred until the local Kalman tracking core is stable.
+
+---
+
+## Roadmap after v0
+
+Recommended next steps:
+
+```text
+1. Improve uncertainty calibration so pull widths approach 1.
+2. Add simple triplet seeding instead of truth-assisted seeding.
+3. Add material/process-noise studies.
+4. Compare with ACTS GenericDetector truth samples.
+5. Move to ODD full-chain samples.
+6. Later validate against CMS Open Data.
+```
+
+The next serious external validation target should be ACTS GenericDetector particle-gun or truth-tracking outputs, not CMS data immediately.
+
+---
+
+## Scientific honesty
+
+OpenReco v0 is a minimal local tracking core. It is not a full detector framework.
+
+The current implementation is useful because it already contains the smallest complete reconstruction loop:
+
+```text
+surface-bound state
+surface measurements
+prediction
+update
+smoothing
+residuals
+pulls
+momentum estimate
+uncertainty estimate
+multi-event validation
+```
+
+The main remaining limitation is not whether the loop exists. It does. The next challenge is calibration and validation against external truth data.
