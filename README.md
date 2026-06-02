@@ -345,6 +345,16 @@ Fit quality:
   covariance valid = True
 ```
 
+## Demo plots
+
+### 3D cylindrical barrel view
+
+![OpenReco 3D cylindrical barrel view](docs/images/openreco_3d_event.png)
+
+### x-y top view of magnetic bending
+
+![OpenReco x-y top view](docs/images/openreco_xy_view.png)
+
 The single-event pull values are only a smoke test. Pull distributions need many events.
 
 ---
