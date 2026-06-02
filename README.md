@@ -465,7 +465,7 @@ The next serious external validation target should be ACTS GenericDetector parti
 
 ---
 
-## Scientific honesty
+## What it is:
 
 OpenReco v0 is a minimal local tracking core. It is not a full detector framework.
 
