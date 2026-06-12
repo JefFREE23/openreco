@@ -1,4 +1,3 @@
-@'
 import numpy as np
 
 from openreco.event_generation import (
@@ -95,4 +94,3 @@ def test_hit_global_position_is_consistent_with_radius():
 
         assert np.isclose(reconstructed_radius, hit.radius)
         assert np.isclose(z, hit.z)
-'@ | Set-Content tests\test_event_generation.py
