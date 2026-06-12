@@ -1,4 +1,3 @@
-@'
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -377,4 +376,3 @@ def _layer_radius(layer: Any) -> float:
         if hasattr(layer, attr):
             return float(getattr(layer, attr))
     raise TypeError("Layer must have radius or r attribute.")
-'@ | Set-Content openreco\event_generation.py
