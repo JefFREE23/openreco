@@ -104,7 +104,7 @@ def test_validate_reconstructed_tracks_reports_efficiency_fake_and_duplicate_rat
     event = generate_event(
         n_particles=2,
         hit_efficiency=1.0,
-        noise_hits_per_layer=0,
+        noise_hits_per_layer=1,
     )
 
     hits_particle_0 = [
@@ -117,24 +117,24 @@ def test_validate_reconstructed_tracks_reports_efficiency_fake_and_duplicate_rat
         if hit.truth_particle_id == 1
     ]
 
-    good_track_0 = DummyTrack(track_id=0, used_measurements=hits_particle_0[:6])
-    duplicate_track_0 = DummyTrack(track_id=1, used_measurements=hits_particle_0[:6])
-    good_track_1 = DummyTrack(track_id=2, used_measurements=hits_particle_1[:6])
-
     noise_hits = [
         hit for hit in event.measurements
         if hit.is_noise
     ]
-    
+
+    good_track_0 = DummyTrack(track_id=0, used_measurements=hits_particle_0[:6])
+    duplicate_track_0 = DummyTrack(track_id=1, used_measurements=hits_particle_0[:6])
+    good_track_1 = DummyTrack(track_id=2, used_measurements=hits_particle_1[:6])
+
     fake_track = DummyTrack(
         track_id=3,
         used_measurements=noise_hits[:4],
     )
-    
-        summary = validate_reconstructed_tracks(
-            [good_track_0, duplicate_track_0, good_track_1, fake_track],
-            n_truth_particles=2,
-        )
+
+    summary = validate_reconstructed_tracks(
+        [good_track_0, duplicate_track_0, good_track_1, fake_track],
+        n_truth_particles=2,
+    )
 
     assert summary.n_truth_particles == 2
     assert summary.n_reconstructed_tracks == 4
