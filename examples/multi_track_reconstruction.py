@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -109,6 +110,15 @@ def run_multi_track_reconstruction(
                 for track in tracks
                 if track.chi2_ndof <= max_fit_chi2_ndof
             ]
+
+        tracks = [
+            track
+            for track in tracks
+            if track.covariance_valid
+            and math.isfinite(track.q_over_p)
+            and math.isfinite(track.pt_estimate)
+            and math.isfinite(track.p_estimate)
+        ]
     else:
         tracks = raw_tracks
 
