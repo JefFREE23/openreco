@@ -37,6 +37,12 @@ class ReconstructedTrack:
 
     fit_status: str = "accepted"
 
+    filtered_states: tuple[Any, ...] = ()
+    smoothed_states: tuple[Any, ...] = ()
+    final_covariance: Any | None = None
+    covariance_valid: bool = False
+    momentum_uncertainty: float = float("nan")
+
     @property
     def hits(self) -> tuple[EventHit, ...]:
         return self.used_measurements
