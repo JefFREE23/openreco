@@ -42,6 +42,8 @@ class ReconstructedTrack:
     final_covariance: Any | None = None
     covariance_valid: bool = False
     momentum_uncertainty: float = float("nan")
+    n_holes: int = 0
+    missing_layer_names: tuple[str, ...] = ()
 
     @property
     def hits(self) -> tuple[EventHit, ...]:
@@ -122,6 +124,7 @@ def find_tracks_from_seeds(
         raise ValueError("min_hits must be positive.")
 
     sorted_layer_items = _sorted_layer_items(measurements_by_layer)
+    all_layer_names = _all_layer_names_sorted(measurements_by_layer)
 
     accepted_tracks: list[ReconstructedTrack] = []
     globally_used_hit_ids: set[int] = set()
@@ -144,16 +147,16 @@ def find_tracks_from_seeds(
 
         model = _LinearSeedModel.fit(selected_hits)
 
-        max_seed_layer_index = max(hit.layer_index for hit in seed.hits)
+        seed_layer_names = {hit.layer_name for hit in seed.hits}
 
-        for _layer_name, layer_hits in sorted_layer_items:
+        for layer_name, layer_hits in sorted_layer_items:
             if not layer_hits:
                 continue
 
-            layer_index = layer_hits[0].layer_index
-
-            if layer_index <= max_seed_layer_index:
+            if layer_name in seed_layer_names:
                 continue
+
+            layer_index = layer_hits[0].layer_index
 
             candidates = [
                 hit for hit in layer_hits
@@ -190,11 +193,26 @@ def find_tracks_from_seeds(
         if len(selected_hits) < min_hits:
             continue
 
+        selected_hits = sorted(
+            selected_hits,
+            key=lambda hit: (hit.layer_index, hit.radius, hit.hit_id),
+        )
+        selected_hit_ids = {hit.hit_id for hit in selected_hits}
+        model = _LinearSeedModel.fit(selected_hits)
+
         ndof = max(2 * n_added_outer_hits, 1)
         chi2_ndof = total_chi2 / ndof
 
         last_radius = max(hit.radius for hit in selected_hits)
         final_phi, final_z = model.predict(last_radius)
+
+        used_layer_names = {hit.layer_name for hit in selected_hits}
+        missing_layer_names = tuple(
+            layer_name
+            for layer_name in all_layer_names
+            if layer_name not in used_layer_names
+        )
+        n_holes = len(missing_layer_names)
 
         track = ReconstructedTrack(
             track_id=len(accepted_tracks),
@@ -216,6 +234,8 @@ def find_tracks_from_seeds(
             final_covariance=None,
             covariance_valid=False,
             momentum_uncertainty=float("nan"),
+            n_holes=int(n_holes),
+            missing_layer_names=missing_layer_names,
         )
 
         accepted_tracks.append(track)
@@ -286,3 +306,21 @@ def _angle_difference(phi_a: float, phi_b: float) -> float:
 
 def _wrap_phi(phi: float) -> float:
     return float(phi % (2.0 * pi))
+
+def _all_layer_names_sorted(
+    measurements_by_layer: dict[str, list[EventHit]],
+) -> tuple[str, ...]:
+    """
+    Return all detector layer names in geometry order.
+
+    Empty layers are included. That is required for hole counting.
+    """
+
+    def layer_sort_key(layer_name: str) -> tuple[int, str]:
+        try:
+            return (int(layer_name.rsplit("_", 1)[1]), layer_name)
+        except Exception:
+            return (10**9, layer_name)
+
+    return tuple(sorted(measurements_by_layer.keys(), key=layer_sort_key))
+

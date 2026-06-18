@@ -19,7 +19,11 @@ from openreco.event_generation import (
     count_real_hits,
     generate_event,
 )
-from openreco.seeding import TripletSeed, build_triplet_seeds
+from openreco.seeding import (
+    TripletSeed,
+    build_triplet_seeds,
+    build_triplet_seeds_for_layer_sets,
+)
 from openreco.track_finding import ReconstructedTrack, find_tracks_from_seeds
 from openreco.track_fitting import fit_reconstructed_tracks_with_ekf
 from openreco.truth_matching import ValidationSummary, validate_reconstructed_tracks
@@ -44,7 +48,9 @@ def run_multi_track_reconstruction(
     random_seed: int = 123,
     chi2_threshold: float = 25.0,
     min_hits: int = 6,
+    seed_mode: str = "strict",
     use_ekf_fit: bool = True,
+    max_fit_chi2_ndof: float | None = 50.0,
     make_plot: bool = True,
     output_path: str | Path = "docs/images/v1_multi_track_event.png",
 ) -> MultiTrackDemoResult:
@@ -75,7 +81,12 @@ def run_multi_track_reconstruction(
         rng=rng,
     )
 
-    seeds = build_triplet_seeds(event.measurements_by_layer)
+    if seed_mode == "strict":
+        seeds = build_triplet_seeds(event.measurements_by_layer)
+    elif seed_mode == "hole-aware":
+        seeds = build_triplet_seeds_for_layer_sets(event.measurements_by_layer)
+    else:
+        raise ValueError("seed_mode must be either 'strict' or 'hole-aware'")
 
     raw_tracks = find_tracks_from_seeds(
         seeds,
@@ -91,6 +102,13 @@ def run_multi_track_reconstruction(
             raw_tracks,
             fail_safely=True,
         )
+
+        if max_fit_chi2_ndof is not None:
+            tracks = [
+                track
+                for track in tracks
+                if track.chi2_ndof <= max_fit_chi2_ndof
+            ]
     else:
         tracks = raw_tracks
 
@@ -193,6 +211,12 @@ def format_demo_summary(result: MultiTrackDemoResult) -> str:
         else float("nan")
     )
 
+    hole_values = [
+        track.n_holes
+        for track in result.tracks
+    ]
+    mean_holes_per_track = mean(hole_values) if hole_values else float("nan")
+
     momentum_errors = result.momentum_relative_errors
     momentum_error_mean = mean(momentum_errors) if momentum_errors else float("nan")
     momentum_error_std = pstdev(momentum_errors) if len(momentum_errors) > 1 else 0.0
@@ -215,6 +239,7 @@ def format_demo_summary(result: MultiTrackDemoResult) -> str:
         f"duplicate rate:         {validation.duplicate_rate:.3f}",
         f"mean chi2/ndof:         {mean_chi2_ndof:.3f}",
         f"covariance valid rate:  {covariance_valid_rate:.3f}",
+        f"mean holes/track:       {mean_holes_per_track:.3f}",
         f"momentum rel error:     mean={momentum_error_mean:.4f}, std={momentum_error_std:.4f}",
     ]
 
@@ -323,6 +348,13 @@ def main() -> None:
     parser.add_argument("--chi2-threshold", type=float, default=25.0)
     parser.add_argument("--min-hits", type=int, default=6)
     parser.add_argument(
+        "--seed-mode",
+        type=str,
+        default="strict",
+        choices=("strict", "hole-aware"),
+        help="Use strict first-three-layer seeds or hole-aware multi-layer seeds.",
+    )
+    parser.add_argument(
         "--no-ekf-fit",
         action="store_true",
         help="Run the demo without EKF fitting/smoothing.",
@@ -348,6 +380,7 @@ def main() -> None:
         random_seed=args.random_seed,
         chi2_threshold=args.chi2_threshold,
         min_hits=args.min_hits,
+        seed_mode=args.seed_mode,
         use_ekf_fit=not args.no_ekf_fit,
         make_plot=not args.no_plot,
         output_path=args.output_path,

@@ -267,3 +267,52 @@ def _common_truth_id(hits: tuple[EventHit, EventHit, EventHit]) -> Optional[int]
 
 def _wrap_phi(phi: float) -> float:
     return float(phi % (2.0 * pi))
+
+def build_triplet_seeds_for_layer_sets(
+    measurements_by_layer: dict[str, list[EventHit]],
+    *,
+    layer_sets: tuple[tuple[str, str, str], ...] | None = None,
+    bz: float = 2.0,
+    curvature_scale: float = 0.003,
+    max_circle_residual: float = 1.0,
+) -> list[TripletSeed]:
+    """
+    Build triplet seeds from multiple 3-layer combinations.
+
+    This is the Phase C hole-aware seed mode. It keeps the original
+    build_triplet_seeds() function unchanged, but allows recovery when one
+    of the first three barrel layers is missing.
+    """
+
+    from dataclasses import replace
+    from itertools import combinations
+
+    if layer_sets is None:
+        layer_names = tuple(
+            sorted(
+                measurements_by_layer.keys(),
+                key=lambda name: int(name.rsplit("_", 1)[1])
+                if name.rsplit("_", 1)[-1].isdigit()
+                else 10**9,
+            )
+        )
+        layer_sets = tuple(combinations(layer_names, 3))
+
+    all_seeds: list[TripletSeed] = []
+
+    for layer_names in layer_sets:
+        seeds = build_triplet_seeds(
+            measurements_by_layer,
+            layer_names=layer_names,
+            bz=bz,
+            curvature_scale=curvature_scale,
+            max_circle_residual=max_circle_residual,
+        )
+
+        for seed in seeds:
+            all_seeds.append(
+                replace(seed, seed_id=len(all_seeds))
+            )
+
+    return all_seeds
+

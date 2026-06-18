@@ -23,6 +23,8 @@ class ScanConfig:
     hit_efficiency: float
     n_events: int
     random_seed: int
+    min_hits: int
+    seed_mode: str
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,7 @@ class ScanResult:
     duplicate_rate_mean: float
 
     mean_hits_per_track: float
+    mean_holes_per_track: float
     mean_chi2_ndof: float
     covariance_valid_rate_mean: float
 
@@ -59,6 +62,8 @@ def run_performance_scan(
     noise_hits_per_layer_values: Iterable[int] = (0, 1),
     hit_efficiencies: Iterable[float] = (1.0, 0.95),
     random_seed: int = 123,
+    min_hits: int = 6,
+    seed_mode: str = "strict",
 ) -> list[ScanResult]:
     """
     Run the OpenReco v1 event-level reconstruction chain many times.
@@ -85,6 +90,8 @@ def run_performance_scan(
                     hit_efficiency=float(hit_efficiency),
                     n_events=int(n_events),
                     random_seed=int(random_seed),
+                    min_hits=int(min_hits),
+                    seed_mode=str(seed_mode),
                 )
 
                 results.append(run_single_scan_point(config))
@@ -100,6 +107,7 @@ def run_single_scan_point(config: ScanConfig) -> ScanResult:
     fake_rates: list[float] = []
     duplicate_rates: list[float] = []
     hits_per_track_values: list[float] = []
+    holes_per_track_values: list[float] = []
     chi2_ndof_values: list[float] = []
     covariance_valid_rates: list[float] = []
     momentum_residuals: list[float] = []
@@ -113,6 +121,8 @@ def run_single_scan_point(config: ScanConfig) -> ScanResult:
             hit_efficiency=config.hit_efficiency,
             noise_hits_per_layer=config.noise_hits_per_layer,
             random_seed=config.random_seed + event_index,
+            min_hits=config.min_hits,
+            seed_mode=config.seed_mode,
             make_plot=False,
         )
 
@@ -127,6 +137,10 @@ def run_single_scan_point(config: ScanConfig) -> ScanResult:
         if result.tracks:
             hits_per_track_values.append(
                 mean(len(track.used_measurements) for track in result.tracks)
+            )
+
+            holes_per_track_values.append(
+                mean(track.n_holes for track in result.tracks)
             )
 
             chi2_ndof_values.extend(
@@ -158,6 +172,7 @@ def run_single_scan_point(config: ScanConfig) -> ScanResult:
         fake_rate_mean=_safe_mean(fake_rates),
         duplicate_rate_mean=_safe_mean(duplicate_rates),
         mean_hits_per_track=_safe_mean(hits_per_track_values),
+        mean_holes_per_track=_safe_mean(holes_per_track_values),
         mean_chi2_ndof=_safe_mean(chi2_ndof_values),
         covariance_valid_rate_mean=_safe_mean(covariance_valid_rates),
         momentum_residual_mean=_safe_mean(momentum_residuals),
@@ -174,7 +189,7 @@ def format_scan_results(results: list[ScanResult]) -> str:
         (
             "n_particles  noise/layer  hit_eff  events  "
             "eff     fake    dup     seeds/event  tracks/event  "
-            "chi2/ndof  cov_valid  mom_res_mean  runtime/event"
+            "holes/track  chi2/ndof  cov_valid  mom_res_mean  runtime/event"
         ),
         "-" * 130,
     ]
@@ -190,6 +205,7 @@ def format_scan_results(results: list[ScanResult]) -> str:
             f"{result.duplicate_rate_mean:<8.3f}"
             f"{result.seeds_mean:<13.2f}"
             f"{result.reconstructed_tracks_mean:<14.2f}"
+            f"{result.mean_holes_per_track:<13.2f}"
             f"{result.mean_chi2_ndof:<10.3f}"
             f"{result.covariance_valid_rate_mean:<11.3f}"
             f"{result.momentum_residual_mean:<14.4f}"
@@ -243,6 +259,13 @@ def main() -> None:
     parser.add_argument("--noise-hits-per-layer", type=str, default="0,1")
     parser.add_argument("--hit-efficiencies", type=str, default="1.0,0.95")
     parser.add_argument("--random-seed", type=int, default=123)
+    parser.add_argument("--min-hits", type=int, default=6)
+    parser.add_argument(
+        "--seed-mode",
+        type=str,
+        default="strict",
+        choices=("strict", "hole-aware"),
+    )
     parser.add_argument(
         "--output-csv",
         type=str,
@@ -257,6 +280,8 @@ def main() -> None:
         noise_hits_per_layer_values=_parse_int_list(args.noise_hits_per_layer),
         hit_efficiencies=_parse_float_list(args.hit_efficiencies),
         random_seed=args.random_seed,
+        min_hits=args.min_hits,
+        seed_mode=args.seed_mode,
     )
 
     print(format_scan_results(results))
