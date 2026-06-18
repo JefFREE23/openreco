@@ -1,0 +1,2 @@
+n_particles,noise_hits_per_layer,hit_efficiency,events_processed,truth_particles_generated,measurements_mean,seeds_mean,reconstructed_tracks_mean,tracking_efficiency_mean,fake_rate_mean,duplicate_rate_mean,mean_hits_per_track,mean_holes_per_track,mean_chi2_ndof,covariance_valid_rate_mean,momentum_residual_mean,momentum_residual_std,runtime_total_s,runtime_per_event_s
+5,1,0.95,200,1000,34.695,3869.565,4.78,0.956,0.0,0.0,5.790416666666666,0.20958333333333334,0.9924979391001845,1.0,0.001130078604360417,0.06497576812134251,426.9185410999926,2.134592705499963
