@@ -266,5 +266,5 @@ print()
 print(f"CSV saved: {csv_path}")
 ```
 
-if **name** == "**main**":
+if __name__ == "__main__":
 main()
