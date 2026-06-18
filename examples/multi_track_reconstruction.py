@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import mean, pstdev
 from typing import Optional
 
 import numpy as np
-
-import sys
-from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -23,6 +21,7 @@ from openreco.event_generation import (
 )
 from openreco.seeding import TripletSeed, build_triplet_seeds
 from openreco.track_finding import ReconstructedTrack, find_tracks_from_seeds
+from openreco.track_fitting import fit_reconstructed_tracks_with_ekf
 from openreco.truth_matching import ValidationSummary, validate_reconstructed_tracks
 
 
@@ -45,6 +44,7 @@ def run_multi_track_reconstruction(
     random_seed: int = 123,
     chi2_threshold: float = 25.0,
     min_hits: int = 6,
+    use_ekf_fit: bool = True,
     make_plot: bool = True,
     output_path: str | Path = "docs/images/v1_multi_track_event.png",
 ) -> MultiTrackDemoResult:
@@ -55,6 +55,7 @@ def run_multi_track_reconstruction(
         event generation
         -> triplet seeding
         -> greedy track finding
+        -> optional EKF fitting/smoothing
         -> truth matching
         -> validation metrics
         -> optional XY event plot
@@ -76,13 +77,22 @@ def run_multi_track_reconstruction(
 
     seeds = build_triplet_seeds(event.measurements_by_layer)
 
-    tracks = find_tracks_from_seeds(
+    raw_tracks = find_tracks_from_seeds(
         seeds,
         event.measurements_by_layer,
         chi2_threshold=chi2_threshold,
         min_hits=min_hits,
+        allow_shared_hits=False,
         max_tracks=n_particles,
     )
+
+    if use_ekf_fit:
+        tracks = fit_reconstructed_tracks_with_ekf(
+            raw_tracks,
+            fail_safely=True,
+        )
+    else:
+        tracks = raw_tracks
 
     validation = validate_reconstructed_tracks(
         tracks,
@@ -172,6 +182,17 @@ def format_demo_summary(result: MultiTrackDemoResult) -> str:
 
     mean_chi2_ndof = mean(chi2_values) if chi2_values else float("nan")
 
+    covariance_flags = [
+        1.0 if getattr(track, "covariance_valid", False) else 0.0
+        for track in result.tracks
+    ]
+
+    covariance_valid_rate = (
+        mean(covariance_flags)
+        if covariance_flags
+        else float("nan")
+    )
+
     momentum_errors = result.momentum_relative_errors
     momentum_error_mean = mean(momentum_errors) if momentum_errors else float("nan")
     momentum_error_std = pstdev(momentum_errors) if len(momentum_errors) > 1 else 0.0
@@ -193,6 +214,7 @@ def format_demo_summary(result: MultiTrackDemoResult) -> str:
         f"fake rate:              {validation.fake_rate:.3f}",
         f"duplicate rate:         {validation.duplicate_rate:.3f}",
         f"mean chi2/ndof:         {mean_chi2_ndof:.3f}",
+        f"covariance valid rate:  {covariance_valid_rate:.3f}",
         f"momentum rel error:     mean={momentum_error_mean:.4f}, std={momentum_error_std:.4f}",
     ]
 
@@ -301,6 +323,11 @@ def main() -> None:
     parser.add_argument("--chi2-threshold", type=float, default=25.0)
     parser.add_argument("--min-hits", type=int, default=6)
     parser.add_argument(
+        "--no-ekf-fit",
+        action="store_true",
+        help="Run the demo without EKF fitting/smoothing.",
+    )
+    parser.add_argument(
         "--output-path",
         type=str,
         default="docs/images/v1_multi_track_event.png",
@@ -321,6 +348,7 @@ def main() -> None:
         random_seed=args.random_seed,
         chi2_threshold=args.chi2_threshold,
         min_hits=args.min_hits,
+        use_ekf_fit=not args.no_ekf_fit,
         make_plot=not args.no_plot,
         output_path=args.output_path,
     )
