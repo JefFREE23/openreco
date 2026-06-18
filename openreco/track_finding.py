@@ -205,6 +205,11 @@ def find_tracks_from_seeds(
             pt_estimate=float(seed.pt_estimate),
             p_estimate=float(seed.p_estimate),
             fit_status="accepted",
+            filtered_states=(),
+            smoothed_states=(),
+            final_covariance=None,
+            covariance_valid=False,
+            momentum_uncertainty=float("nan"),
         )
 
         accepted_tracks.append(track)
