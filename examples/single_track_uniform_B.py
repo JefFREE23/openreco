@@ -13,8 +13,6 @@ It uses:
     - surface-bound cylindrical EKF Kalman filter
     - backward smoothing
     - cylindrical detector visualization
-
-This is still a minimal v0 reconstruction chain, not ACTS-level tracking.
 """
 
 from pathlib import Path
