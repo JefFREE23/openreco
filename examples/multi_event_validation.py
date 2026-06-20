@@ -1,20 +1,11 @@
 """
-Multi-event validation for OpenReco v0.
+Internal multi-event validation for the OpenReco v0 single-track chain.
 
-This script runs many single-particle events through the full local v0 chain:
+The script repeats a fixed single-particle toy event with randomized
+measurement smearing, then runs the cylindrical detector, EKF fit,
+RTS smoothing, pull calculation, and momentum-resolution checks.
 
-    particle gun truth
-    uniform B field
-    cylindrical detector
-    smeared [phi, z] measurements
-    truth-assisted seed
-    bound-state EKF filtering
-    RTS-style smoothing
-    pull collection
-    momentum error collection
-
-This is not yet ACTS GenericDetector validation.
-It is internal self-consistency validation before moving to external data.
+This is a self-consistency test, not an external ACTS/GenericDetector validation.
 """
 
 from pathlib import Path
