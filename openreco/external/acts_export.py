@@ -117,7 +117,7 @@ def _truth_rows_from_event(event: Event) -> list[dict[str, Any]]:
 
 def _truth_particle_to_row(event_id: int, particle: TruthParticle) -> dict[str, Any]:
     pt = float(particle.pt)
-    phi = float(particle.phi)
+    phi = _wrap_phi_to_pi(particle.phi)
     tan_lambda = float(particle.tan_lambda)
 
     px = pt * math.cos(phi)
@@ -158,9 +158,16 @@ def _flatten_hits(event: Event) -> list[EventHit]:
 
     for layer_name in sorted(
         event.measurements_by_layer,
-        key=lambda name: min(hit.layer_index for hit in event.measurements_by_layer[name]),
+        key=lambda name: min(
+            hit.layer_index for hit in event.measurements_by_layer[name]
+        ),
     ):
-        hits.extend(sorted(event.measurements_by_layer[layer_name], key=lambda hit: hit.hit_id))
+        hits.extend(
+            sorted(
+                event.measurements_by_layer[layer_name],
+                key=lambda hit: hit.hit_id,
+            )
+        )
 
     return hits
 
@@ -170,7 +177,7 @@ def _event_hit_to_measurement_row(event_id: int, hit: EventHit) -> dict[str, Any
     surface_id = 1000 + layer_id
 
     radius = float(hit.radius)
-    phi = float(hit.phi)
+    phi = _wrap_phi_to_pi(hit.phi)
     z = float(hit.z)
 
     x = radius * math.cos(phi)
@@ -232,6 +239,17 @@ dataset used to validate the v2 file interface and reconstruction path.
 """
 
     (output_path / "README.md").write_text(readme, encoding="utf-8")
+
+
+def _wrap_phi_to_pi(phi: float) -> float:
+    """Wrap an angle into [-pi, pi]."""
+
+    wrapped = (float(phi) + math.pi) % (2.0 * math.pi) - math.pi
+
+    if wrapped == -math.pi:
+        return math.pi
+
+    return wrapped
 
 
 def _fmt(value: float) -> str:
