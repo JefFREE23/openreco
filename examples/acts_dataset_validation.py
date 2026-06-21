@@ -9,10 +9,12 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from openreco.external.acts_loader import load_acts_dataset
-from openreco.external.reconstruction import (
-    format_external_reco_summary,
-    run_external_dataset_reconstruction,
+from openreco.external.reconstruction import run_external_dataset_reconstruction
+from openreco.validation.external_metrics import (
+    compute_external_validation_metrics,
+    format_external_validation_metrics,
 )
+from openreco.validation.report import write_external_validation_report
 
 
 def main() -> None:
@@ -59,6 +61,25 @@ def main() -> None:
         help="Disable EKF fitting and run only seeding + track finding.",
     )
 
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="docs",
+        help="Directory where CSV reports and plots are saved.",
+    )
+
+    parser.add_argument(
+        "--no-report",
+        action="store_true",
+        help="Do not write CSV report files.",
+    )
+
+    parser.add_argument(
+        "--no-plots",
+        action="store_true",
+        help="Do not write validation plots.",
+    )
+
     args = parser.parse_args()
 
     dataset = load_acts_dataset(args.dataset)
@@ -72,7 +93,26 @@ def main() -> None:
         use_ekf_fit=not args.no_ekf_fit,
     )
 
-    print(format_external_reco_summary(summary))
+    metrics = compute_external_validation_metrics(summary)
+
+    print(format_external_validation_metrics(metrics))
+
+    if not args.no_report:
+        paths = write_external_validation_report(
+            summary,
+            args.output_dir,
+            make_plots=not args.no_plots,
+        )
+
+        print("")
+        print(f"summary CSV:               {paths.summary_csv}")
+        print(f"tracks CSV:                {paths.tracks_csv}")
+
+        if paths.efficiency_plot is not None:
+            print(f"efficiency plot:           {paths.efficiency_plot}")
+
+        if paths.momentum_residual_plot is not None:
+            print(f"momentum residual plot:    {paths.momentum_residual_plot}")
 
 
 if __name__ == "__main__":
