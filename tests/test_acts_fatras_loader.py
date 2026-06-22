@@ -39,6 +39,7 @@ def test_load_fatras_event():
     assert first.r > 0
     assert first.sigma_phi == pytest.approx(1.0e-3)
     assert first.sigma_z == pytest.approx(0.10)
+    assert first.r < 200.0
     assert first.is_noise is False
 
 
@@ -50,6 +51,7 @@ def test_load_fatras_dataset():
     assert dataset.metadata["n_events"] == 1
     assert dataset.metadata["n_truth_particles"] == 1
     assert dataset.metadata["n_measurements"] == 11
+    assert dataset.metadata["length_scale"] == pytest.approx(0.1)
 
 
 def test_fatras_dataset_runs_external_reconstruction_without_crashing():
