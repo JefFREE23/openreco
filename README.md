@@ -86,9 +86,9 @@ docs/images/v2_efficiency_summary.png
 docs/images/v2_momentum_residuals.png
 ```
 
-### v2 ACTS/Fatras smoke-test summary
+### v2 ACTS/Fatras smoke-test note
 
-The momentum residual plot is also generated, but it is not highlighted here because the current official ACTS/Fatras sample contains only one reconstructed track. A larger ACTS/Fatras sample is needed before the residual histogram becomes visually meaningful.
+The validation plots are generated automatically, but they are not highlighted here because the current official ACTS/Fatras sample contains only one reconstructed track. A larger ACTS/Fatras sample is needed before the residual histogram becomes visually meaningful.
 
 Current full test suite:
 
