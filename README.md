@@ -71,24 +71,37 @@ covariance valid rate:        1.000
 momentum rel residual:        mean=-0.0031, std=0.0000
 ```
 
-Run the official ACTS/Fatras validation example:
+Run the OpenReco-generated external-format validation sample:
 
 ```powershell
-python examples/acts_dataset_validation.py --dataset datasets/acts_fatras_sample --input-format acts-fatras
+python examples/acts_dataset_validation.py --dataset datasets/acts_openreco_generated --input-format acts-style --output-dir docs/reports/acts_openreco_generated
 ```
 
-The v2 validation report writes:
+Run the official ACTS/Fatras validation sample:
+
+```powershell
+python examples/acts_dataset_validation.py --dataset datasets/acts_fatras_sample --input-format acts-fatras --output-dir docs/reports/acts_fatras_smoke_test
+```
+
+The v2 validation reports are stored separately for the two validation samples:
 
 ```text
-docs/v2_external_validation_summary.csv
-docs/v2_external_validation_tracks.csv
-docs/images/v2_efficiency_summary.png
-docs/images/v2_momentum_residuals.png
+docs/reports/acts_openreco_generated/
+  v2_external_validation_summary.csv
+  v2_external_validation_tracks.csv
+  images/v2_efficiency_summary.png
+  images/v2_momentum_residuals.png
+
+docs/reports/acts_fatras_smoke_test/
+  v2_external_validation_summary.csv
+  v2_external_validation_tracks.csv
+  images/v2_efficiency_summary.png
+  images/v2_momentum_residuals.png
 ```
 
-### v2 ACTS/Fatras smoke-test note
+The `acts_openreco_generated` sample is a larger OpenReco-compatible external-format validation sample. It is useful for checking the reconstruction chain with more events and more tracks.
 
-The validation plots are generated automatically, but they are not highlighted here because the current official ACTS/Fatras sample contains only one reconstructed track. A larger ACTS/Fatras sample is needed before the residual histogram becomes visually meaningful.
+The `acts_fatras_smoke_test` sample is the official ACTS/Fatras CSV smoke test. It is smaller, but it is the real external-data proof that OpenReco can load official ACTS/Fatras output and run the validation chain.
 
 Current full test suite:
 
@@ -120,6 +133,22 @@ python examples/acts_dataset_validation.py --dataset datasets/acts_small --input
 
 This format is useful for controlled tests and reproducible toy external samples.
 
+OpenReco also includes a larger OpenReco-generated external-format validation sample:
+
+```text
+datasets/acts_openreco_generated/
+  truth_particles.csv
+  measurements.csv
+```
+
+Run:
+
+```powershell
+python examples/acts_dataset_validation.py --dataset datasets/acts_openreco_generated --input-format acts-style --output-dir docs/reports/acts_openreco_generated
+```
+
+This sample is useful for checking the v2 external reconstruction chain with more events and tracks than the official ACTS/Fatras smoke-test sample.
+
 ### 2. Official ACTS/Fatras GenericDetector CSV format
 
 Directory structure:
@@ -134,13 +163,13 @@ datasets/acts_fatras_sample/
 Run:
 
 ```powershell
-python examples/acts_dataset_validation.py --dataset datasets/acts_fatras_sample --input-format acts-fatras
+python examples/acts_dataset_validation.py --dataset datasets/acts_fatras_sample --input-format acts-fatras --output-dir docs/reports/acts_fatras_smoke_test
 ```
 
 Optional ACTS/Fatras calibration parameters:
 
 ```powershell
-python examples/acts_dataset_validation.py --dataset datasets/acts_fatras_sample --input-format acts-fatras --fatras-length-scale 0.1 --fatras-radius-merge-tolerance 0.5
+python examples/acts_dataset_validation.py --dataset datasets/acts_fatras_sample --input-format acts-fatras --fatras-length-scale 0.1 --fatras-radius-merge-tolerance 0.5 --output-dir docs/reports/acts_fatras_smoke_test
 ```
 
 The default `fatras-length-scale=0.1` maps mm-like ACTS coordinates into OpenReco’s smaller toy detector scale.
@@ -271,7 +300,13 @@ Current result:
 Run the v2 official ACTS/Fatras validation example:
 
 ```powershell
-python examples/acts_dataset_validation.py --dataset datasets/acts_fatras_sample --input-format acts-fatras
+python examples/acts_dataset_validation.py --dataset datasets/acts_fatras_sample --input-format acts-fatras --output-dir docs/reports/acts_fatras_smoke_test
+```
+
+Run the larger OpenReco-generated external-format validation example:
+
+```powershell
+python examples/acts_dataset_validation.py --dataset datasets/acts_openreco_generated --input-format acts-style --output-dir docs/reports/acts_openreco_generated
 ```
 
 Run the simple ACTS-style validation example:
@@ -350,6 +385,25 @@ datasets/
 
 docs/
   images/
+    openreco_3d_event.png
+    openreco_xy_view.png
+    v1_multi_track_event.png
+    v2_efficiency_summary.png
+    v2_momentum_residuals.png
+  reports/
+    acts_openreco_generated/
+      images/
+        v2_efficiency_summary.png
+        v2_momentum_residuals.png
+      v2_external_validation_summary.csv
+      v2_external_validation_tracks.csv
+    acts_fatras_smoke_test/
+      images/
+        v2_efficiency_summary.png
+        v2_momentum_residuals.png
+      v2_external_validation_summary.csv
+      v2_external_validation_tracks.csv
+  v1_performance_scan.csv
   v2_external_validation_summary.csv
   v2_external_validation_tracks.csv
 
