@@ -7,10 +7,15 @@ This module converts ACTS/Fatras event CSV files such as
 
 into the existing OpenReco v2 ActsDataset schema.
 
-It intentionally keeps the scope narrow:
+Scope:
 - particles_initial.csv provides truth particles
 - hits.csv provides simulated hit positions and truth particle labels
 - cells.csv and particles_final.csv are not required for the first v2 importer
+
+Important:
+ACTS hit coordinates are typically mm-like detector coordinates. OpenReco's
+toy barrel examples use smaller internal length scales. The default
+length_scale=0.1 maps mm -> cm-like OpenReco units.
 """
 
 from __future__ import annotations
@@ -22,7 +27,6 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import median
-from typing import Any
 
 from openreco.external.acts_schema import (
     ActsDataset,
@@ -68,11 +72,21 @@ HITS_REQUIRED_COLUMNS = {
 
 @dataclass(frozen=True)
 class ActsFatrasLoaderConfig:
-    """Configuration for ACTS/Fatras CSV loading."""
+    """Configuration for ACTS/Fatras CSV loading.
+
+    length_scale:
+        Multiplies ACTS positions. Default 0.1 treats ACTS mm as cm-like
+        OpenReco units.
+
+    radius_merge_tolerance:
+        Nearby ACTS surfaces with median radii closer than this value after
+        scaling are merged into one simplified OpenReco barrel layer.
+    """
 
     sigma_phi: float = 1.0e-3
-    sigma_z: float = 0.10
-    length_scale: float = 1.0
+    sigma_z: float = 1.0
+    length_scale: float = 0.1
+    radius_merge_tolerance: float = 0.5
 
 
 def load_fatras_dataset(
@@ -109,6 +123,8 @@ def load_fatras_dataset(
             "n_events": len(events),
             "n_truth_particles": n_truth_particles,
             "n_measurements": n_measurements,
+            "length_scale": config.length_scale,
+            "radius_merge_tolerance": config.radius_merge_tolerance,
         },
     )
 
@@ -119,7 +135,6 @@ def find_fatras_event_ids(dataset_dir: str | Path) -> list[int]:
     dataset_path = Path(dataset_dir)
 
     event_ids: list[int] = []
-
     pattern = re.compile(r"event(\d+)-hits\.csv$")
 
     for path in dataset_path.glob("event*-hits.csv"):
@@ -265,9 +280,8 @@ def _infer_layer_ids_from_hit_rows(
 ) -> dict[int, int]:
     """Infer simplified barrel layer IDs from ACTS geometry IDs.
 
-    ACTS geometry IDs are full surface/module identifiers. For OpenReco v2,
-    we map each unique ACTS geometry ID to a simplified layer index ordered
-    by median cylindrical radius.
+    ACTS geometry IDs identify detailed surfaces/modules. OpenReco v2 maps
+    those detailed surfaces to simplified cylindrical radius shells.
     """
 
     radii_by_geometry_id: dict[int, list[float]] = defaultdict(list)
@@ -279,15 +293,38 @@ def _infer_layer_ids_from_hit_rows(
 
         radii_by_geometry_id[geometry_id].append(math.hypot(x, y))
 
-    sorted_geometry_ids = sorted(
-        radii_by_geometry_id,
-        key=lambda geometry_id: median(radii_by_geometry_id[geometry_id]),
+    geometry_radius_pairs = sorted(
+        (
+            geometry_id,
+            float(median(radii)),
+        )
+        for geometry_id, radii in radii_by_geometry_id.items()
     )
 
-    return {
-        geometry_id: layer_index + 1
-        for layer_index, geometry_id in enumerate(sorted_geometry_ids)
-    }
+    geometry_radius_pairs.sort(key=lambda pair: pair[1])
+
+    clusters: list[list[tuple[int, float]]] = []
+
+    for geometry_id, radius in geometry_radius_pairs:
+        if not clusters:
+            clusters.append([(geometry_id, radius)])
+            continue
+
+        current_cluster = clusters[-1]
+        current_cluster_radius = median(radius_value for _, radius_value in current_cluster)
+
+        if abs(radius - current_cluster_radius) <= config.radius_merge_tolerance:
+            current_cluster.append((geometry_id, radius))
+        else:
+            clusters.append([(geometry_id, radius)])
+
+    layer_id_by_geometry_id: dict[int, int] = {}
+
+    for layer_index, cluster in enumerate(clusters, start=1):
+        for geometry_id, _ in cluster:
+            layer_id_by_geometry_id[geometry_id] = layer_index
+
+    return layer_id_by_geometry_id
 
 
 def _read_csv_rows(path: str | Path, required_columns: set[str]) -> list[dict[str, str]]:
