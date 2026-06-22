@@ -8,6 +8,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from openreco.external.acts_fatras_loader import load_fatras_dataset
 from openreco.external.acts_loader import load_acts_dataset
 from openreco.external.reconstruction import run_external_dataset_reconstruction
 from openreco.validation.external_metrics import (
@@ -26,7 +27,20 @@ def main() -> None:
         "--dataset",
         type=str,
         default="datasets/acts_small",
-        help="Path to ACTS-style dataset directory.",
+        help="Path to external dataset directory.",
+    )
+
+    parser.add_argument(
+        "--input-format",
+        type=str,
+        default="acts-style",
+        choices=("acts-style", "acts-fatras"),
+        help=(
+            "Input dataset format. "
+            "'acts-style' expects truth_particles.csv + measurements.csv. "
+            "'acts-fatras' expects official ACTS/Fatras event*-hits.csv "
+            "+ event*-particles_initial.csv files."
+        ),
     )
 
     parser.add_argument(
@@ -82,11 +96,23 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    dataset = load_acts_dataset(args.dataset)
+    if args.input_format == "acts-style":
+        dataset = load_acts_dataset(args.dataset)
+        reconstruction_max_events = args.max_events
+
+    elif args.input_format == "acts-fatras":
+        dataset = load_fatras_dataset(
+            args.dataset,
+            max_events=args.max_events,
+        )
+        reconstruction_max_events = None
+
+    else:
+        raise ValueError(f"Unknown input format: {args.input_format}")
 
     summary = run_external_dataset_reconstruction(
         dataset,
-        max_events=args.max_events,
+        max_events=reconstruction_max_events,
         seed_mode=args.seed_mode,
         min_hits=args.min_hits,
         chi2_threshold=args.chi2_threshold,
