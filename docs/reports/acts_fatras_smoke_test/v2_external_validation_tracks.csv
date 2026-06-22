@@ -1,0 +1,2 @@
+event_id,track_index,track_id,seed_id,n_used_hits,matched_truth_particle_id,matched_fraction,is_matched,is_fake,is_duplicate,chi2,ndof,chi2_ndof,q_over_p,pt_estimate,p_estimate,truth_p,momentum_relative_residual,covariance_valid,momentum_uncertainty,n_holes,fit_status
+0,0,0,1,10,4503599644147712,1.0,True,False,False,1.1605335776217143,15,0.07736890517478096,0.41139684776315755,2.020662126043551,2.4307429807427767,2.4383998417908326,-0.0031401171033674396,True,0.021257979495830776,0,accepted
