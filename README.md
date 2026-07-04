@@ -971,25 +971,6 @@ The current ACTS/Fatras importer uses a simplified cylindrical radius-shell mapp
 
 ---
 
-## Roadmap after v2.0
-
-Recommended next steps:
-
-```text
-1. Improve uncertainty calibration so pull widths approach 1.
-2. Add stronger ambiguity resolution for duplicate-track suppression.
-3. Add configurable material/process-noise studies.
-4. Add multiple-scattering and energy-loss effects.
-5. Compare against larger ACTS/Fatras GenericDetector samples.
-6. Add optional ACTS reference-track comparison if exported tracks are available.
-7. Move to ODD-style full-chain samples.
-8. Add a Geant4-compatible hit/truth interface in v3.0.
-9. Later validate against CMS Open Data.
-10. Eventually explore CKF-style branching, GPU acceleration, and ML-based tracking.
-```
-
----
-
 ## What OpenReco is
 
 OpenReco is a minimal reconstruction learning and prototyping framework. It is not a full detector framework.
