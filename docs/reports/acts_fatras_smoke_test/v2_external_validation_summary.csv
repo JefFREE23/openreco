@@ -1,2 +1,2 @@
 event_id,n_truth_particles,n_measurements,n_seeds,n_reco_tracks,n_matched_tracks,n_unique_matched_truth_particles,n_fake_tracks,n_duplicate_tracks,unique_tracking_efficiency,raw_matched_track_efficiency,fake_rate,duplicate_rate,mean_chi2_ndof,covariance_valid_rate,runtime_seconds
-0,1,11,156,1,1,1,0,0,1.0,1.0,0.0,0.0,0.07736890517478096,1.0,0.7016451000017696
+0,1,11,156,1,1,1,0,0,1.0,1.0,0.0,0.0,0.07736890517478096,1.0,0.7339471000013873

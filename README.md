@@ -108,8 +108,33 @@ Current full test suite:
 ```text
 254 passed
 ```
+### v2.1 evidence report
+
+The v2.1 evidence-consolidation report is available at:
+
+`docs/reports/v2_1_evidence/OpenReco_v0_to_v2_validation_report.md`
+
+Supporting v2.1 evidence files:
+
+`docs/reports/v2_1_evidence/validation_summary_table.csv`
+
+`docs/reports/v2_1_evidence/scope_and_limitations.md`
+
+v2.1 does not add new reconstruction algorithms. It consolidates the v0, v1, and v2 validation evidence, clarifies the project scope, and prepares OpenReco for controlled tracking-performance studies.
 
 ---
+
+### v2.2 tracking performance analysis suite
+
+OpenReco v2.2 adds a reusable tracking-performance analysis suite for controlled reconstruction studies.
+
+It scans particle multiplicity, hit efficiency, and noise occupancy, then writes a reproducible CSV summary, standard performance plots, and a Markdown report.
+
+Run:
+
+```powershell
+python examples/v2_2_tracking_performance_study.py
+
 
 ## v2 input formats
 
@@ -1009,25 +1034,6 @@ machine-learning-based tracking
 ```
 
 The current ACTS/Fatras importer uses a simplified cylindrical radius-shell mapping. It is sufficient for the v2.0 external validation milestone, but it is not yet a full detector-geometry translation.
-
----
-
-## Roadmap after v2.0
-
-Recommended next steps:
-
-```text
-1. Improve uncertainty calibration so pull widths approach 1.
-2. Add stronger ambiguity resolution for duplicate-track suppression.
-3. Add configurable material/process-noise studies.
-4. Add multiple-scattering and energy-loss effects.
-5. Compare against larger ACTS/Fatras GenericDetector samples.
-6. Add optional ACTS reference-track comparison if exported tracks are available.
-7. Move to ODD-style full-chain samples.
-8. Add a Geant4-compatible hit/truth interface in v3.0.
-9. Later validate against CMS Open Data.
-10. Eventually explore CKF-style branching, GPU acceleration, and ML-based tracking.
-```
 
 ---
 
