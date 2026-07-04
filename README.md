@@ -111,6 +111,18 @@ v2.1 does not add new reconstruction algorithms. It consolidates the v0, v1, and
 
 ---
 
+### v2.2 tracking performance analysis suite
+
+OpenReco v2.2 adds a reusable tracking-performance analysis suite for controlled reconstruction studies.
+
+It scans particle multiplicity, hit efficiency, and noise occupancy, then writes a reproducible CSV summary, standard performance plots, and a Markdown report.
+
+Run:
+
+```powershell
+python examples/v2_2_tracking_performance_study.py
+
+
 ## v2 input formats
 
 OpenReco v2 supports two external input modes.
