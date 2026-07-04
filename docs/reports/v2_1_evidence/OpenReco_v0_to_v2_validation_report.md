@@ -165,15 +165,11 @@ The pull widths are below 1, especially for `phi`. This indicates that the uncer
 
 3D cylindrical detector view:
 
-```text
-docs/images/openreco_3d_event.png
-```
+![OpenReco v0 3D cylindrical detector view](../../images/openreco_3d_event.png)
 
 x-y magnetic-bending view:
 
-```text
-docs/images/openreco_xy_view.png
-```
+![OpenReco v0 x-y magnetic bending view](../../images/openreco_xy_view.png)
 
 ---
 
@@ -270,9 +266,7 @@ The zero fake and duplicate rates in this toy configuration should not be overin
 
 The v1 event display is:
 
-```text
-docs/images/v1_multi_track_event.png
-```
+![OpenReco v1 multi-track event display](../../images/v1_multi_track_event.png)
 
 ---
 
