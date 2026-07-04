@@ -10,7 +10,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from openreco.analysis.plotting import ensure_figure_dir
+from openreco.analysis.performance import read_performance_results
+from openreco.analysis.plotting import (
+    ensure_figure_dir,
+    generate_standard_performance_plots,
+)
 from openreco.analysis.scans import (
     make_scan_grid,
     run_and_write_tracking_performance_scan,
@@ -44,6 +48,18 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--dry-run",
         action="store_true",
         help="Print the planned scan grid without running reconstruction.",
+    )
+
+    parser.add_argument(
+        "--plot-only",
+        action="store_true",
+        help="Read the existing summary CSV and regenerate plots only.",
+    )
+
+    parser.add_argument(
+        "--skip-plots",
+        action="store_true",
+        help="Run the scan without generating figure files.",
     )
 
     parser.add_argument(
@@ -118,15 +134,29 @@ def main(argv: list[str] | None = None) -> int:
             )
         return 0
 
-    print()
-    print("Running tracking-performance scan...")
-    results = run_and_write_tracking_performance_scan(
-        output_path=summary_csv,
-        configs=configs,
-    )
+    if args.plot_only:
+        print()
+        print("Loading existing tracking-performance CSV...")
+        results = read_performance_results(summary_csv)
+    else:
+        print()
+        print("Running tracking-performance scan...")
+        results = run_and_write_tracking_performance_scan(
+            output_path=summary_csv,
+            configs=configs,
+        )
+        print(f"completed scan points: {len(results)}")
+        print(f"CSV saved:             {summary_csv}")
 
-    print(f"completed scan points: {len(results)}")
-    print(f"CSV saved:             {summary_csv}")
+    if not args.skip_plots:
+        print()
+        print("Generating standard performance plots...")
+        plots = generate_standard_performance_plots(
+            results=results,
+            figure_dir=figure_dir,
+        )
+        for name, path in plots.items():
+            print(f"{name}: {path}")
 
     return 0
 

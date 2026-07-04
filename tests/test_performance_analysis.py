@@ -2,6 +2,8 @@ from pathlib import Path
 
 import pytest
 
+from openreco.analysis.plotting import generate_standard_performance_plots
+
 from openreco.analysis.performance import (
     PerformanceResult,
     PerformanceScanConfig,
@@ -133,3 +135,68 @@ def test_run_and_write_tracking_performance_scan_smoke(tmp_path: Path):
     assert 0.0 <= result.tracking_efficiency_mean <= 1.0
     assert 0.0 <= result.fake_rate_mean <= 1.0
     assert 0.0 <= result.duplicate_rate_mean <= 1.0
+
+def test_generate_standard_performance_plots(tmp_path: Path):
+    results = [
+        PerformanceResult(
+            n_particles=1,
+            noise_hits_per_layer=0,
+            hit_efficiency=1.0,
+            events_processed=2,
+            truth_particles_generated=2,
+            measurements_mean=6.0,
+            seeds_mean=20.0,
+            reconstructed_tracks_mean=1.0,
+            tracking_efficiency_mean=1.0,
+            fake_rate_mean=0.0,
+            duplicate_rate_mean=0.0,
+            mean_hits_per_track=6.0,
+            mean_holes_per_track=0.0,
+            mean_chi2_ndof=1.0,
+            covariance_valid_rate_mean=1.0,
+            momentum_residual_mean=0.0,
+            momentum_residual_std=0.05,
+            runtime_total_s=1.0,
+            runtime_per_event_s=0.5,
+        ),
+        PerformanceResult(
+            n_particles=1,
+            noise_hits_per_layer=1,
+            hit_efficiency=0.95,
+            events_processed=2,
+            truth_particles_generated=2,
+            measurements_mean=12.0,
+            seeds_mean=160.0,
+            reconstructed_tracks_mean=0.9,
+            tracking_efficiency_mean=0.9,
+            fake_rate_mean=0.0,
+            duplicate_rate_mean=0.0,
+            mean_hits_per_track=5.8,
+            mean_holes_per_track=0.2,
+            mean_chi2_ndof=1.1,
+            covariance_valid_rate_mean=1.0,
+            momentum_residual_mean=0.0,
+            momentum_residual_std=0.06,
+            runtime_total_s=1.2,
+            runtime_per_event_s=0.6,
+        ),
+    ]
+
+    figure_dir = tmp_path / "figures"
+    plots = generate_standard_performance_plots(results, figure_dir)
+
+    expected_names = {
+        "efficiency_vs_hit_efficiency",
+        "fake_rate_vs_noise",
+        "duplicate_rate_vs_noise",
+        "chi2_vs_hit_efficiency",
+        "momentum_resolution_vs_hit_efficiency",
+        "runtime_vs_occupancy",
+    }
+
+    assert set(plots) == expected_names
+
+    for path in plots.values():
+        assert path.exists()
+        assert path.suffix == ".png"
+        assert path.stat().st_size > 0
