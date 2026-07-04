@@ -1,6 +1,5 @@
 # OpenReco v0–v2 Validation Report
 
-## Title
 
 **OpenReco v0–v2: A Compact Python Testbed for Controlled Tracking Reconstruction Studies**
 
