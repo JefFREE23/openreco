@@ -2,6 +2,8 @@ from pathlib import Path
 
 import pytest
 
+from openreco.analysis.reporting import write_tracking_performance_report
+
 from openreco.analysis.plotting import generate_standard_performance_plots
 
 from openreco.analysis.performance import (
@@ -200,3 +202,42 @@ def test_generate_standard_performance_plots(tmp_path: Path):
         assert path.exists()
         assert path.suffix == ".png"
         assert path.stat().st_size > 0
+
+def test_write_tracking_performance_report(tmp_path: Path):
+    result = PerformanceResult(
+        n_particles=1,
+        noise_hits_per_layer=0,
+        hit_efficiency=1.0,
+        events_processed=2,
+        truth_particles_generated=2,
+        measurements_mean=6.0,
+        seeds_mean=20.0,
+        reconstructed_tracks_mean=1.0,
+        tracking_efficiency_mean=1.0,
+        fake_rate_mean=0.0,
+        duplicate_rate_mean=0.0,
+        mean_hits_per_track=6.0,
+        mean_holes_per_track=0.0,
+        mean_chi2_ndof=1.0,
+        covariance_valid_rate_mean=1.0,
+        momentum_residual_mean=0.0,
+        momentum_residual_std=0.05,
+        runtime_total_s=1.0,
+        runtime_per_event_s=0.5,
+    )
+
+    report_path = tmp_path / "tracking_performance_report.md"
+    written_path = write_tracking_performance_report(
+        results=[result],
+        output_path=report_path,
+        figure_dir=tmp_path / "figures",
+    )
+
+    assert written_path == report_path
+    assert report_path.exists()
+
+    text = report_path.read_text(encoding="utf-8")
+    assert "OpenReco v2.2 Tracking Performance Analysis Report" in text
+    assert "Tracking efficiency" in text or "tracking efficiency" in text
+    assert "Consolidated performance table" in text
+    assert "1.0000" in text

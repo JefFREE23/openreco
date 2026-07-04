@@ -15,6 +15,7 @@ from openreco.analysis.plotting import (
     ensure_figure_dir,
     generate_standard_performance_plots,
 )
+from openreco.analysis.reporting import write_tracking_performance_report
 from openreco.analysis.scans import (
     make_scan_grid,
     run_and_write_tracking_performance_scan,
@@ -53,13 +54,19 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--plot-only",
         action="store_true",
-        help="Read the existing summary CSV and regenerate plots only.",
+        help="Read the existing summary CSV and regenerate plots and report.",
     )
 
     parser.add_argument(
         "--skip-plots",
         action="store_true",
         help="Run the scan without generating figure files.",
+    )
+
+    parser.add_argument(
+        "--skip-report",
+        action="store_true",
+        help="Run the scan without writing the Markdown report.",
     )
 
     parser.add_argument(
@@ -104,6 +111,7 @@ def main(argv: list[str] | None = None) -> int:
     output_dir = Path(args.output_dir)
     figure_dir = ensure_figure_dir(output_dir / "figures")
     summary_csv = output_dir / "tracking_performance_summary.csv"
+    report_path = output_dir / "tracking_performance_report.md"
 
     configs = make_scan_grid(
         n_particles=_parse_int_list(args.n_particles),
@@ -118,6 +126,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"output directory: {output_dir}")
     print(f"figure directory: {figure_dir}")
     print(f"summary CSV:      {summary_csv}")
+    print(f"report:           {report_path}")
     print(f"scan points:      {len(configs)}")
 
     if args.dry_run:
@@ -157,6 +166,16 @@ def main(argv: list[str] | None = None) -> int:
         )
         for name, path in plots.items():
             print(f"{name}: {path}")
+
+    if not args.skip_report:
+        print()
+        print("Writing Markdown performance report...")
+        written_report = write_tracking_performance_report(
+            results=results,
+            output_path=report_path,
+            figure_dir=figure_dir,
+        )
+        print(f"report saved: {written_report}")
 
     return 0
 

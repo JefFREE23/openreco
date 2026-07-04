@@ -13,6 +13,10 @@ from openreco.analysis.plotting import (
     plot_metric_vs_noise,
     plot_runtime_vs_seed_occupancy,
 )
+from openreco.analysis.reporting import (
+    build_tracking_performance_report,
+    write_tracking_performance_report,
+)
 from openreco.analysis.scans import (
     default_v2_2_scan_grid,
     make_scan_grid,
@@ -30,6 +34,8 @@ __all__ = [
     "plot_metric_vs_hit_efficiency",
     "plot_metric_vs_noise",
     "plot_runtime_vs_seed_occupancy",
+    "build_tracking_performance_report",
+    "write_tracking_performance_report",
     "default_v2_2_scan_grid",
     "make_scan_grid",
     "run_tracking_performance_scan",
