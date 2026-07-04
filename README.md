@@ -95,6 +95,19 @@ Current full test suite:
 ```text
 254 passed
 ```
+### v2.1 evidence report
+
+The v2.1 evidence-consolidation report is available at:
+
+`docs/reports/v2_1_evidence/OpenReco_v0_to_v2_validation_report.md`
+
+Supporting v2.1 evidence files:
+
+`docs/reports/v2_1_evidence/validation_summary_table.csv`
+
+`docs/reports/v2_1_evidence/scope_and_limitations.md`
+
+v2.1 does not add new reconstruction algorithms. It consolidates the v0, v1, and v2 validation evidence, clarifies the project scope, and prepares OpenReco for controlled tracking-performance studies.
 
 ---
 
