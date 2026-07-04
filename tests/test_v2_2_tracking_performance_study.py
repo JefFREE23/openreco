@@ -29,3 +29,27 @@ def test_v2_2_tracking_performance_study_dry_run(capsys):
     assert "OpenReco v2.2 tracking performance study" in captured.out
     assert "Planned scan grid" in captured.out
     assert "scan points:" in captured.out
+
+
+def test_v2_2_tracking_performance_study_runs_small_scan(tmp_path):
+    module = _load_example_module()
+
+    output_dir = tmp_path / "v2_2_report"
+    exit_code = module.main(
+        [
+            "--output-dir",
+            str(output_dir),
+            "--n-particles",
+            "1",
+            "--noise-hits",
+            "0",
+            "--hit-efficiencies",
+            "1.0",
+            "--n-events",
+            "2",
+        ]
+    )
+
+    assert exit_code == 0
+    assert (output_dir / "tracking_performance_summary.csv").exists()
+    assert (output_dir / "figures").exists()

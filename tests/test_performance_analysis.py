@@ -101,3 +101,35 @@ def test_default_v2_2_scan_grid_matches_initial_scope():
     assert {config.n_particles for config in configs} == {1, 2, 5}
     assert {config.noise_hits_per_layer for config in configs} == {0, 1}
     assert {config.hit_efficiency for config in configs} == {1.0, 0.95}
+
+from openreco.analysis.scans import run_and_write_tracking_performance_scan
+
+
+def test_run_and_write_tracking_performance_scan_smoke(tmp_path: Path):
+    output_path = tmp_path / "tracking_performance_summary.csv"
+
+    configs = make_scan_grid(
+        n_particles=(1,),
+        noise_hits_per_layer=(0,),
+        hit_efficiencies=(1.0,),
+        n_events=2,
+        seed=12345,
+        seed_mode="hole-aware",
+    )
+
+    results = run_and_write_tracking_performance_scan(
+        output_path=output_path,
+        configs=configs,
+    )
+
+    assert output_path.exists()
+    assert len(results) == 1
+
+    result = results[0]
+    assert result.n_particles == 1
+    assert result.noise_hits_per_layer == 0
+    assert result.hit_efficiency == 1.0
+    assert result.events_processed == 2
+    assert 0.0 <= result.tracking_efficiency_mean <= 1.0
+    assert 0.0 <= result.fake_rate_mean <= 1.0
+    assert 0.0 <= result.duplicate_rate_mean <= 1.0
