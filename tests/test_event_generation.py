@@ -7,6 +7,7 @@ from openreco.event_generation import (
     make_default_barrel,
 )
 
+from openreco.detector_effects import DetectorEffectsConfig, HitResolutionModel
 
 def test_generate_event_with_five_particles_has_truth_ids():
     rng = np.random.default_rng(123)
@@ -94,3 +95,53 @@ def test_hit_global_position_is_consistent_with_radius():
 
         assert np.isclose(reconstructed_radius, hit.radius)
         assert np.isclose(z, hit.z)
+
+
+def test_generate_event_uses_detector_effects_hit_resolution_in_covariance():
+    rng = np.random.default_rng(123)
+
+    config = DetectorEffectsConfig(
+        hit_resolution=HitResolutionModel(sigma_phi=0.002, sigma_z=0.25)
+    )
+
+    event = generate_event(
+        event_id=0,
+        n_particles=1,
+        detector_effects=config,
+        rng=rng,
+    )
+
+    real_hits = [hit for hit in event.measurements if not hit.is_noise]
+    assert real_hits
+
+    for hit in real_hits:
+        np.testing.assert_allclose(
+            hit.covariance,
+            np.diag([0.002**2, 0.25**2]),
+        )
+
+
+def test_generate_event_detector_effects_overrides_legacy_sigma_arguments():
+    rng = np.random.default_rng(123)
+
+    config = DetectorEffectsConfig(
+        hit_resolution=HitResolutionModel(sigma_phi=0.003, sigma_z=0.30)
+    )
+
+    event = generate_event(
+        event_id=0,
+        n_particles=1,
+        measurement_sigma_phi=0.001,
+        measurement_sigma_z=0.10,
+        detector_effects=config,
+        rng=rng,
+    )
+
+    real_hits = [hit for hit in event.measurements if not hit.is_noise]
+    assert real_hits
+
+    for hit in real_hits:
+        np.testing.assert_allclose(
+            hit.covariance,
+            np.diag([0.003**2, 0.30**2]),
+        )
