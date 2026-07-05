@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from math import asin, cos, pi, sin, sqrt
 from typing import Any, Optional
+from openreco.detector_effects import DetectorEffectsConfig
 
 import numpy as np
 
@@ -171,6 +172,7 @@ def generate_event(
     noise_hits_per_layer: int = 0,
     measurement_sigma_phi: float = 1.0e-3,
     measurement_sigma_z: float = 0.10,
+    detector_effects: DetectorEffectsConfig | None = None,
     pt_range: tuple[float, float] = (0.5, 5.0),
     phi_range: tuple[float, float] = (0.0, 2.0 * pi),
     z0_range: tuple[float, float] = (0.0, 0.0),
@@ -200,6 +202,10 @@ def generate_event(
 
     if noise_hits_per_layer < 0:
         raise ValueError("noise_hits_per_layer must be non-negative")
+
+    if detector_effects is not None:
+        measurement_sigma_phi = detector_effects.hit_resolution.sigma_phi
+        measurement_sigma_z = detector_effects.hit_resolution.sigma_z
 
     if measurement_sigma_phi <= 0.0:
         raise ValueError("measurement_sigma_phi must be positive")
