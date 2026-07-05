@@ -195,10 +195,10 @@ def generate_event(
 
     Real hits are truth-labelled.
     Noise hits are not truth-labelled.
-    """
 
-    if not 0.0 <= hit_efficiency <= 1.0:
-        raise ValueError("hit_efficiency must be between 0 and 1")
+    If detector_effects is supplied, it overrides the legacy hit-resolution
+    and hit-efficiency arguments and can suppress selected dead layers.
+    """
 
     if noise_hits_per_layer < 0:
         raise ValueError("noise_hits_per_layer must be non-negative")
@@ -206,6 +206,10 @@ def generate_event(
     if detector_effects is not None:
         measurement_sigma_phi = detector_effects.hit_resolution.sigma_phi
         measurement_sigma_z = detector_effects.hit_resolution.sigma_z
+        hit_efficiency = detector_effects.inefficiency.hit_efficiency
+
+    if not 0.0 <= hit_efficiency <= 1.0:
+        raise ValueError("hit_efficiency must be between 0 and 1")
 
     if measurement_sigma_phi <= 0.0:
         raise ValueError("measurement_sigma_phi must be positive")
@@ -228,6 +232,7 @@ def generate_event(
     )
 
     measurements_by_layer: dict[str, list[EventHit]] = {}
+
     for i, layer in enumerate(layers):
         layer_name = _layer_name(layer, i)
         measurements_by_layer[layer_name] = []
@@ -237,6 +242,9 @@ def generate_event(
 
     for particle in truth_particles:
         for i, layer in enumerate(layers):
+            if detector_effects is not None and detector_effects.dead_layers.is_dead(i):
+                continue
+
             if rng.random() > hit_efficiency:
                 continue
 
@@ -252,7 +260,9 @@ def generate_event(
                 continue
 
             true_phi, true_z = expected
-            measured_phi = _wrap_phi(float(true_phi + rng.normal(0.0, measurement_sigma_phi)))
+            measured_phi = _wrap_phi(
+                float(true_phi + rng.normal(0.0, measurement_sigma_phi))
+            )
             measured_z = float(true_z + rng.normal(0.0, measurement_sigma_z))
 
             layer_name = _layer_name(layer, i)
@@ -273,6 +283,10 @@ def generate_event(
 
     for i, layer in enumerate(layers):
         layer_name = _layer_name(layer, i)
+
+        if detector_effects is not None and detector_effects.dead_layers.is_dead(i):
+            continue
+
         radius = _layer_radius(layer)
 
         for _ in range(noise_hits_per_layer):

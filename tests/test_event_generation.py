@@ -7,7 +7,12 @@ from openreco.event_generation import (
     make_default_barrel,
 )
 
-from openreco.detector_effects import DetectorEffectsConfig, HitResolutionModel
+from openreco.detector_effects import (
+    DeadLayerModel,
+    DetectorEffectsConfig,
+    HitResolutionModel,
+    InefficiencyModel,
+)
 
 def test_generate_event_with_five_particles_has_truth_ids():
     rng = np.random.default_rng(123)
@@ -145,3 +150,88 @@ def test_generate_event_detector_effects_overrides_legacy_sigma_arguments():
             hit.covariance,
             np.diag([0.003**2, 0.30**2]),
         )
+        
+
+def test_generate_event_uses_detector_effects_hit_efficiency():
+    rng = np.random.default_rng(123)
+
+    config = DetectorEffectsConfig(
+        inefficiency=InefficiencyModel(hit_efficiency=0.0)
+    )
+
+    event = generate_event(
+        event_id=0,
+        n_particles=3,
+        detector_effects=config,
+        noise_hits_per_layer=0,
+        rng=rng,
+    )
+
+    assert count_real_hits(event) == 0
+    assert count_noise_hits(event) == 0
+
+
+def test_generate_event_detector_effects_hit_efficiency_overrides_legacy_argument():
+    rng = np.random.default_rng(123)
+
+    config = DetectorEffectsConfig(
+        inefficiency=InefficiencyModel(hit_efficiency=0.0)
+    )
+
+    event = generate_event(
+        event_id=0,
+        n_particles=3,
+        hit_efficiency=1.0,
+        detector_effects=config,
+        noise_hits_per_layer=0,
+        rng=rng,
+    )
+
+    assert count_real_hits(event) == 0
+
+
+def test_generate_event_dead_layers_produce_no_measurements_on_selected_layers():
+    rng = np.random.default_rng(123)
+
+    config = DetectorEffectsConfig(
+        dead_layers=DeadLayerModel(dead_layers=[1, 4])
+    )
+
+    event = generate_event(
+        event_id=0,
+        n_particles=3,
+        detector_effects=config,
+        hit_efficiency=1.0,
+        noise_hits_per_layer=0,
+        rng=rng,
+    )
+
+    assert len(event.measurements_by_layer["barrel_0"]) == 3
+    assert len(event.measurements_by_layer["barrel_1"]) == 0
+    assert len(event.measurements_by_layer["barrel_2"]) == 3
+    assert len(event.measurements_by_layer["barrel_3"]) == 3
+    assert len(event.measurements_by_layer["barrel_4"]) == 0
+    assert len(event.measurements_by_layer["barrel_5"]) == 3
+
+    assert count_real_hits(event) == 12
+
+
+def test_generate_event_dead_layers_suppress_noise_hits_too():
+    rng = np.random.default_rng(123)
+
+    config = DetectorEffectsConfig(
+        inefficiency=InefficiencyModel(hit_efficiency=0.0),
+        dead_layers=DeadLayerModel(dead_layers=[2]),
+    )
+
+    event = generate_event(
+        event_id=0,
+        n_particles=1,
+        detector_effects=config,
+        noise_hits_per_layer=2,
+        rng=rng,
+    )
+
+    assert len(event.measurements_by_layer["barrel_2"]) == 0
+    assert count_real_hits(event) == 0
+    assert count_noise_hits(event) == 10
