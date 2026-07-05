@@ -1,0 +1,5 @@
+sigma_phi,sigma_z,n_events,n_particles,hit_efficiency,noise_hits_per_layer,events_processed,truth_particles_generated,measurements_mean,seeds_mean,reconstructed_tracks_mean,tracking_efficiency_mean,fake_rate_mean,duplicate_rate_mean,mean_hits_per_track,mean_holes_per_track,mean_chi2_ndof,covariance_valid_rate_mean,momentum_residual_mean,momentum_residual_std
+0.0005,0.05,10,5,1.0,0,10,50,30.0,2500.0,5.0,1.0,0.0,0.0,6.0,0.0,1.1325621280640905,1.0,-0.0009937301829212656,0.027984253416548605
+0.001,0.1,10,5,1.0,0,10,50,30.0,2500.0,5.0,1.0,0.0,0.0,6.0,0.0,1.0392917497959329,1.0,0.015005941504462076,0.08136899558100409
+0.002,0.2,10,5,1.0,0,10,50,30.0,2500.0,5.0,1.0,0.0,0.0,6.0,0.0,0.9585358902027197,1.0,0.010886845386137548,0.15082612992377178
+0.005,0.5,10,5,1.0,0,10,50,30.0,2500.0,5.0,1.0,0.0,0.0,6.0,0.0,1.0574888524001724,1.0,0.19201152727142654,0.9282198124803029
