@@ -8,6 +8,7 @@ from openreco.detector_effects import (
     LayerMaterial,
     MagneticFieldScale,
     NoiseOccupancyModel,
+    multiple_scattering_theta0,
 )
 
 
@@ -136,3 +137,62 @@ def test_uniform_material_helper():
     assert config.material_for_layer(0).x_over_x0 == pytest.approx(0.005)
     assert config.material_for_layer(1).energy_loss_mev == pytest.approx(0.1)
     assert config.material_for_layer(2).x_over_x0 == pytest.approx(0.005)
+
+def test_multiple_scattering_theta0_zero_material_is_zero():
+    theta0 = multiple_scattering_theta0(
+        p_gev=1.0,
+        x_over_x0=0.0,
+    )
+
+    assert theta0 == 0.0
+
+
+def test_multiple_scattering_theta0_increases_with_material():
+    thin = multiple_scattering_theta0(
+        p_gev=2.0,
+        x_over_x0=0.001,
+    )
+    thick = multiple_scattering_theta0(
+        p_gev=2.0,
+        x_over_x0=0.01,
+    )
+
+    assert thick > thin
+
+
+def test_multiple_scattering_theta0_decreases_with_momentum():
+    low_momentum = multiple_scattering_theta0(
+        p_gev=1.0,
+        x_over_x0=0.01,
+    )
+    high_momentum = multiple_scattering_theta0(
+        p_gev=5.0,
+        x_over_x0=0.01,
+    )
+
+    assert low_momentum > high_momentum
+
+
+def test_multiple_scattering_theta0_reference_value():
+    theta0 = multiple_scattering_theta0(
+        p_gev=1.0,
+        x_over_x0=0.01,
+    )
+
+    assert abs(theta0 - 0.001122) < 1.0e-6
+
+
+def test_multiple_scattering_theta0_rejects_invalid_inputs():
+    try:
+        multiple_scattering_theta0(p_gev=0.0, x_over_x0=0.01)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Expected ValueError for non-positive momentum")
+
+    try:
+        multiple_scattering_theta0(p_gev=1.0, x_over_x0=-0.01)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Expected ValueError for negative material")

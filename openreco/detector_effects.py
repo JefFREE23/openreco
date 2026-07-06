@@ -196,3 +196,60 @@ class DetectorEffectsConfig:
             if material.layer_id == normalized_layer_id:
                 return material
         return LayerMaterial(layer_id=normalized_layer_id)
+
+def multiple_scattering_theta0(
+    *,
+    p_gev: float,
+    x_over_x0: float,
+    beta: float = 1.0,
+    charge_abs: float = 1.0,
+) -> float:
+    """Return the Highland multiple-scattering RMS angle in radians.
+
+    Parameters
+    ----------
+    p_gev:
+        Particle momentum in GeV/c.
+    x_over_x0:
+        Material thickness in radiation lengths.
+    beta:
+        Particle speed divided by c. Defaults to 1 for relativistic particles.
+    charge_abs:
+        Absolute particle charge in units of e.
+
+    Notes
+    -----
+    Uses the standard approximation:
+
+        theta0 = 13.6 MeV / (beta p) * z * sqrt(x/X0)
+                 * [1 + 0.038 ln(x/X0)]
+
+    with p expressed in GeV/c.
+    """
+
+    from math import log, sqrt
+
+    if p_gev <= 0.0:
+        raise ValueError("p_gev must be positive")
+
+    if beta <= 0.0:
+        raise ValueError("beta must be positive")
+
+    if charge_abs < 0.0:
+        raise ValueError("charge_abs must be non-negative")
+
+    if x_over_x0 < 0.0:
+        raise ValueError("x_over_x0 must be non-negative")
+
+    if x_over_x0 == 0.0 or charge_abs == 0.0:
+        return 0.0
+
+    correction = 1.0 + 0.038 * log(x_over_x0)
+
+    return (
+        0.0136
+        / (beta * p_gev)
+        * charge_abs
+        * sqrt(x_over_x0)
+        * correction
+    )
