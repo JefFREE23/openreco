@@ -12,6 +12,7 @@ from openreco.detector_effects import (
     DetectorEffectsConfig,
     HitResolutionModel,
     InefficiencyModel,
+    LayerMaterial,
     NoiseOccupancyModel,
 )
 
@@ -282,3 +283,71 @@ def test_generate_event_dead_layers_suppress_noise_hits_too():
         assert hit.is_noise is True
         assert hit.truth_particle_id is None
         assert hit.layer_index != 2
+
+def test_generate_event_zero_material_matches_clean_detector_for_same_seed():
+    seed = 123
+
+    clean_event = generate_event(
+        event_id=0,
+        n_particles=1,
+        hit_efficiency=1.0,
+        noise_hits_per_layer=0,
+        rng=np.random.default_rng(seed),
+    )
+
+    material_event = generate_event(
+        event_id=0,
+        n_particles=1,
+        detector_effects=DetectorEffectsConfig.with_uniform_material(
+            layer_ids=range(6),
+            x_over_x0=0.0,
+        ),
+        noise_hits_per_layer=0,
+        rng=np.random.default_rng(seed),
+    )
+
+    clean_hits = [hit for hit in clean_event.measurements if not hit.is_noise]
+    material_hits = [hit for hit in material_event.measurements if not hit.is_noise]
+
+    assert len(clean_hits) == len(material_hits)
+
+    for clean_hit, material_hit in zip(clean_hits, material_hits):
+        assert clean_hit.layer_index == material_hit.layer_index
+        assert clean_hit.truth_particle_id == material_hit.truth_particle_id
+        assert np.isclose(clean_hit.phi, material_hit.phi)
+        assert np.isclose(clean_hit.z, material_hit.z)
+
+
+def test_generate_event_material_scattering_changes_downstream_hit_positions():
+    seed = 123
+
+    clean_event = generate_event(
+        event_id=0,
+        n_particles=1,
+        hit_efficiency=1.0,
+        noise_hits_per_layer=0,
+        rng=np.random.default_rng(seed),
+    )
+
+    scattering_event = generate_event(
+        event_id=0,
+        n_particles=1,
+        detector_effects=DetectorEffectsConfig(
+            layer_materials=tuple(
+                LayerMaterial(layer_id=i, x_over_x0=0.05)
+                for i in range(6)
+            )
+        ),
+        noise_hits_per_layer=0,
+        rng=np.random.default_rng(seed),
+    )
+
+    clean_phis = np.array(
+        [hit.phi for hit in clean_event.measurements if not hit.is_noise]
+    )
+    scattering_phis = np.array(
+        [hit.phi for hit in scattering_event.measurements if not hit.is_noise]
+    )
+
+    assert clean_phis.shape == scattering_phis.shape
+    assert not np.allclose(clean_phis, scattering_phis)
