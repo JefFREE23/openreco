@@ -203,13 +203,19 @@ def generate_event(
     if noise_hits_per_layer < 0:
         raise ValueError("noise_hits_per_layer must be non-negative")
 
+    noise_mean_per_layer = float(noise_hits_per_layer)
+
     if detector_effects is not None:
         measurement_sigma_phi = detector_effects.hit_resolution.sigma_phi
         measurement_sigma_z = detector_effects.hit_resolution.sigma_z
         hit_efficiency = detector_effects.inefficiency.hit_efficiency
+        noise_mean_per_layer = detector_effects.noise_occupancy.mean_noise_hits_per_layer
 
     if not 0.0 <= hit_efficiency <= 1.0:
         raise ValueError("hit_efficiency must be between 0 and 1")
+
+    if noise_mean_per_layer < 0.0:
+        raise ValueError("noise_mean_per_layer must be non-negative")
 
     if measurement_sigma_phi <= 0.0:
         raise ValueError("measurement_sigma_phi must be positive")
@@ -289,7 +295,13 @@ def generate_event(
 
         radius = _layer_radius(layer)
 
-        for _ in range(noise_hits_per_layer):
+        n_noise_hits_this_layer = (
+            int(rng.poisson(noise_mean_per_layer))
+            if detector_effects is not None
+            else int(noise_mean_per_layer)
+        )
+
+        for _ in range(n_noise_hits_this_layer):
             measurements_by_layer[layer_name].append(
                 EventHit(
                     hit_id=hit_id,

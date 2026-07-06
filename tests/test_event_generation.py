@@ -12,7 +12,49 @@ from openreco.detector_effects import (
     DetectorEffectsConfig,
     HitResolutionModel,
     InefficiencyModel,
+    NoiseOccupancyModel,
 )
+
+def test_generate_event_detector_effects_noise_occupancy_overrides_legacy_argument():
+    rng = np.random.default_rng(123)
+
+    config = DetectorEffectsConfig(
+        noise_occupancy=NoiseOccupancyModel(mean_noise_hits_per_layer=0.0)
+    )
+
+    event = generate_event(
+        event_id=0,
+        n_particles=0,
+        noise_hits_per_layer=5,
+        detector_effects=config,
+        rng=rng,
+    )
+
+    assert count_real_hits(event) == 0
+    assert count_noise_hits(event) == 0
+
+
+def test_generate_event_detector_effects_noise_occupancy_can_create_noise_hits():
+    rng = np.random.default_rng(123)
+
+    config = DetectorEffectsConfig(
+        noise_occupancy=NoiseOccupancyModel(mean_noise_hits_per_layer=2.0)
+    )
+
+    event = generate_event(
+        event_id=0,
+        n_particles=0,
+        detector_effects=config,
+        rng=rng,
+    )
+
+    assert count_real_hits(event) == 0
+    assert count_noise_hits(event) > 0
+
+    for hit in event.measurements:
+        assert hit.is_noise is True
+        assert hit.truth_particle_id is None
+        
 
 def test_generate_event_with_five_particles_has_truth_ids():
     rng = np.random.default_rng(123)
@@ -222,16 +264,21 @@ def test_generate_event_dead_layers_suppress_noise_hits_too():
     config = DetectorEffectsConfig(
         inefficiency=InefficiencyModel(hit_efficiency=0.0),
         dead_layers=DeadLayerModel(dead_layers=[2]),
+        noise_occupancy=NoiseOccupancyModel(mean_noise_hits_per_layer=2.0),
     )
 
     event = generate_event(
         event_id=0,
-        n_particles=1,
+        n_particles=0,
         detector_effects=config,
-        noise_hits_per_layer=2,
         rng=rng,
     )
 
     assert len(event.measurements_by_layer["barrel_2"]) == 0
     assert count_real_hits(event) == 0
-    assert count_noise_hits(event) == 10
+    assert count_noise_hits(event) > 0
+
+    for hit in event.measurements:
+        assert hit.is_noise is True
+        assert hit.truth_particle_id is None
+        assert hit.layer_index != 2
