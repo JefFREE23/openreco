@@ -50,6 +50,7 @@ def run_multi_track_reconstruction(
     hit_efficiency: float = 1.0,
     noise_hits_per_layer: int = 1,
     detector_effects: DetectorEffectsConfig | None = None,
+    process_noise_scale: float = 0.0,
     random_seed: int = 123,
     chi2_threshold: float = 25.0,
     min_hits: int = 6,
@@ -107,6 +108,8 @@ def run_multi_track_reconstruction(
         tracks = fit_reconstructed_tracks_with_ekf(
             raw_tracks,
             fail_safely=True,
+            detector_effects=detector_effects,
+            process_noise_scale=process_noise_scale,
         )
 
         if max_fit_chi2_ndof is not None:
