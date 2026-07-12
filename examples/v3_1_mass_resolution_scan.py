@@ -239,10 +239,10 @@ def run_mass_resolution_scan(
             study_name=study_name,
             scan_value=scan_value,
             n_events=n_events,
-            seed=seed + 1000 * index,
+            seed=seed,
             min_hits=min_hits,
         )
-        for index, (study_name, scan_value) in enumerate(scan_points)
+        for study_name, scan_value in scan_points
     ]
 
     _write_csv(output_path, results)
