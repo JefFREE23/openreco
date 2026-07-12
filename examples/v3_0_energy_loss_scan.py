@@ -202,9 +202,9 @@ def run_energy_loss_scan(
             n_events=n_events,
             n_particles=n_particles,
             min_hits=min_hits,
-            seed=seed + 1000 * index,
+            seed=seed,
         )
-        for index, energy_loss_mev in enumerate(energy_loss_mev_values)
+        for energy_loss_mev in energy_loss_mev_values
     ]
 
     _write_csv(output_path, results)
