@@ -176,7 +176,7 @@ def run_single_mass_resolution_point(
             random_seed=seed + event_index,
             chi2_threshold=100.0,
             min_hits=min_hits,
-            use_ekf_fit=False,
+            use_ekf_fit=True,
             make_plot=False,
         )
 
