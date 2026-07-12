@@ -248,6 +248,8 @@ def generate_event(
 
     noise_mean_per_layer = float(noise_hits_per_layer)
 
+    truth_bz = float(bz)
+
     if detector_effects is not None:
         measurement_sigma_phi = detector_effects.hit_resolution.sigma_phi
         measurement_sigma_z = detector_effects.hit_resolution.sigma_z
@@ -255,6 +257,7 @@ def generate_event(
         noise_mean_per_layer = (
             detector_effects.noise_occupancy.mean_noise_hits_per_layer
         )
+        truth_bz = float(bz) * detector_effects.b_field_scale.truth_scale
 
     if not 0.0 <= hit_efficiency <= 1.0:
         raise ValueError("hit_efficiency must be between 0 and 1")
@@ -304,7 +307,7 @@ def generate_event(
             expected = _expected_cylindrical_hit(
                 effective_particle,
                 radius=radius,
-                bz=bz,
+                bz=truth_bz,
                 curvature_scale=curvature_scale,
             )
 

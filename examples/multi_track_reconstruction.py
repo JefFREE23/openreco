@@ -17,6 +17,8 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from openreco.detector_effects import DetectorEffectsConfig
 
+from openreco.field import UniformMagneticField
+
 from openreco.event_generation import (
     Event,
     count_noise_hits,
@@ -105,9 +107,15 @@ def run_multi_track_reconstruction(
     )
 
     if use_ekf_fit:
+        reco_bz = 2.0
+
+        if detector_effects is not None:
+            reco_bz *= detector_effects.b_field_scale.reco_scale
+
         tracks = fit_reconstructed_tracks_with_ekf(
             raw_tracks,
             fail_safely=True,
+            field=UniformMagneticField(bz=reco_bz),
             detector_effects=detector_effects,
             process_noise_scale=process_noise_scale,
         )

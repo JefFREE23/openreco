@@ -15,6 +15,7 @@ from openreco.detector_effects import (
     HitResolutionModel,
     InefficiencyModel,
     LayerMaterial,
+    MagneticFieldScale,
     NoiseOccupancyModel,
 )
 
@@ -454,3 +455,73 @@ def test_generate_event_energy_loss_changes_downstream_hit_positions():
 
     assert np.isclose(clean_phis[0], energy_loss_phis[0])
     assert not np.allclose(clean_phis[1:], energy_loss_phis[1:])
+
+def test_generate_event_b_field_truth_scale_one_matches_clean_detector_for_same_seed():
+    seed = 123
+
+    clean_event = generate_event(
+        event_id=0,
+        n_particles=1,
+        hit_efficiency=1.0,
+        noise_hits_per_layer=0,
+        rng=np.random.default_rng(seed),
+    )
+
+    scaled_event = generate_event(
+        event_id=0,
+        n_particles=1,
+        detector_effects=DetectorEffectsConfig(
+            b_field_scale=MagneticFieldScale(
+                truth_scale=1.0,
+                reco_scale=1.0,
+            )
+        ),
+        noise_hits_per_layer=0,
+        rng=np.random.default_rng(seed),
+    )
+
+    clean_hits = [hit for hit in clean_event.measurements if not hit.is_noise]
+    scaled_hits = [hit for hit in scaled_event.measurements if not hit.is_noise]
+
+    assert len(clean_hits) == len(scaled_hits)
+
+    for clean_hit, scaled_hit in zip(clean_hits, scaled_hits):
+        assert clean_hit.layer_index == scaled_hit.layer_index
+        assert clean_hit.truth_particle_id == scaled_hit.truth_particle_id
+        assert np.isclose(clean_hit.phi, scaled_hit.phi)
+        assert np.isclose(clean_hit.z, scaled_hit.z)
+
+
+def test_generate_event_b_field_truth_scale_changes_hit_positions():
+    seed = 123
+
+    clean_event = generate_event(
+        event_id=0,
+        n_particles=1,
+        hit_efficiency=1.0,
+        noise_hits_per_layer=0,
+        rng=np.random.default_rng(seed),
+    )
+
+    scaled_event = generate_event(
+        event_id=0,
+        n_particles=1,
+        detector_effects=DetectorEffectsConfig(
+            b_field_scale=MagneticFieldScale(
+                truth_scale=1.05,
+                reco_scale=1.0,
+            )
+        ),
+        noise_hits_per_layer=0,
+        rng=np.random.default_rng(seed),
+    )
+
+    clean_phis = np.array(
+        [hit.phi for hit in clean_event.measurements if not hit.is_noise]
+    )
+    scaled_phis = np.array(
+        [hit.phi for hit in scaled_event.measurements if not hit.is_noise]
+    )
+
+    assert clean_phis.shape == scaled_phis.shape
+    assert not np.allclose(clean_phis, scaled_phis)
