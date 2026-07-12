@@ -1,6 +1,8 @@
 import numpy as np
 
 from openreco.event_generation import (
+    TruthParticle,
+    apply_energy_loss_to_truth_particle,
     count_noise_hits,
     count_real_hits,
     generate_event,
@@ -351,3 +353,104 @@ def test_generate_event_material_scattering_changes_downstream_hit_positions():
 
     assert clean_phis.shape == scattering_phis.shape
     assert not np.allclose(clean_phis, scattering_phis)
+
+def test_apply_energy_loss_to_truth_particle_updates_momentum():
+    particle = TruthParticle(
+        truth_particle_id=0,
+        pt=2.0,
+        phi=0.1,
+        z0=0.0,
+        tan_lambda=0.5,
+        charge=1,
+        q_over_p=1.0 / (2.0 * np.sqrt(1.0 + 0.5**2)),
+        p=2.0 * np.sqrt(1.0 + 0.5**2),
+    )
+
+    updated = apply_energy_loss_to_truth_particle(
+        particle,
+        energy_loss_mev=100.0,
+    )
+
+    assert updated.truth_particle_id == particle.truth_particle_id
+    assert updated.charge == particle.charge
+    assert updated.phi == particle.phi
+    assert updated.z0 == particle.z0
+    assert updated.tan_lambda == particle.tan_lambda
+
+    assert updated.p < particle.p
+    assert updated.pt < particle.pt
+    assert abs(updated.q_over_p) > abs(particle.q_over_p)
+
+
+def test_generate_event_zero_energy_loss_matches_clean_detector_for_same_seed():
+    seed = 123
+
+    clean_event = generate_event(
+        event_id=0,
+        n_particles=1,
+        hit_efficiency=1.0,
+        noise_hits_per_layer=0,
+        rng=np.random.default_rng(seed),
+    )
+
+    zero_loss_event = generate_event(
+        event_id=0,
+        n_particles=1,
+        detector_effects=DetectorEffectsConfig(
+            layer_materials=tuple(
+                LayerMaterial(layer_id=i, energy_loss_mev=0.0)
+                for i in range(6)
+            )
+        ),
+        noise_hits_per_layer=0,
+        rng=np.random.default_rng(seed),
+    )
+
+    clean_hits = [hit for hit in clean_event.measurements if not hit.is_noise]
+    zero_loss_hits = [hit for hit in zero_loss_event.measurements if not hit.is_noise]
+
+    assert len(clean_hits) == len(zero_loss_hits)
+
+    for clean_hit, zero_loss_hit in zip(clean_hits, zero_loss_hits):
+        assert clean_hit.layer_index == zero_loss_hit.layer_index
+        assert clean_hit.truth_particle_id == zero_loss_hit.truth_particle_id
+        assert np.isclose(clean_hit.phi, zero_loss_hit.phi)
+        assert np.isclose(clean_hit.z, zero_loss_hit.z)
+
+
+def test_generate_event_energy_loss_changes_downstream_hit_positions():
+    seed = 123
+
+    clean_event = generate_event(
+        event_id=0,
+        n_particles=1,
+        hit_efficiency=1.0,
+        noise_hits_per_layer=0,
+        rng=np.random.default_rng(seed),
+    )
+
+    energy_loss_event = generate_event(
+        event_id=0,
+        n_particles=1,
+        detector_effects=DetectorEffectsConfig(
+            layer_materials=tuple(
+                LayerMaterial(layer_id=i, energy_loss_mev=100.0)
+                for i in range(6)
+            )
+        ),
+        noise_hits_per_layer=0,
+        rng=np.random.default_rng(seed),
+    )
+
+    clean_hits = [hit for hit in clean_event.measurements if not hit.is_noise]
+    energy_loss_hits = [
+        hit for hit in energy_loss_event.measurements if not hit.is_noise
+    ]
+
+    assert len(clean_hits) == len(energy_loss_hits)
+
+    clean_phis = np.array([hit.phi for hit in clean_hits])
+    energy_loss_phis = np.array([hit.phi for hit in energy_loss_hits])
+
+    assert np.isclose(clean_phis[0], energy_loss_phis[0])
+    assert not np.allclose(clean_phis[1:], energy_loss_phis[1:])

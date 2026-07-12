@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from math import asin, cos, pi, sin, sqrt
 from typing import Any, Optional
+
 
 from openreco.detector_effects import (
     DetectorEffectsConfig,
     multiple_scattering_theta0,
 )
+from openreco.energy_loss import q_over_p_after_energy_loss
 
 import numpy as np
 
@@ -166,6 +168,42 @@ def generate_truth_particles(
 
     return particles
 
+def apply_energy_loss_to_truth_particle(
+    particle: TruthParticle,
+    *,
+    energy_loss_mev: float,
+) -> TruthParticle:
+    """Return a copy of a truth particle after deterministic energy loss.
+
+    The charge sign and direction parameters are preserved. The total momentum,
+    transverse momentum, and q/p are updated consistently.
+    """
+
+    if energy_loss_mev <= 0.0:
+        return particle
+
+    new_q_over_p = q_over_p_after_energy_loss(
+        q_over_p=particle.q_over_p,
+        energy_loss_mev=energy_loss_mev,
+    )
+
+    if not np.isfinite(new_q_over_p):
+        return replace(
+            particle,
+            pt=0.0,
+            q_over_p=new_q_over_p,
+            p=0.0,
+        )
+
+    new_p = 1.0 / abs(new_q_over_p)
+    new_pt = new_p / sqrt(1.0 + particle.tan_lambda * particle.tan_lambda)
+
+    return replace(
+        particle,
+        pt=float(new_pt),
+        q_over_p=float(new_q_over_p),
+        p=float(new_p),
+    )
 
 def generate_event(
     *,
@@ -254,12 +292,17 @@ def generate_event(
     covariance = np.diag([measurement_sigma_phi**2, measurement_sigma_z**2])
 
     for particle in truth_particles:
+        effective_particle = particle
         cumulative_phi_scatter = 0.0
 
         for i, layer in enumerate(layers):
             radius = _layer_radius(layer)
+
+            if effective_particle.pt <= 0.0:
+                break
+
             expected = _expected_cylindrical_hit(
-                particle,
+                effective_particle,
                 radius=radius,
                 bz=bz,
                 curvature_scale=curvature_scale,
@@ -303,14 +346,20 @@ def generate_event(
 
                 if material.x_over_x0 > 0.0:
                     theta0 = multiple_scattering_theta0(
-                        p_gev=particle.p,
+                        p_gev=effective_particle.p,
                         x_over_x0=material.x_over_x0,
                         beta=1.0,
-                        charge_abs=abs(float(particle.charge)),
+                        charge_abs=abs(float(effective_particle.charge)),
                     )
 
                     if theta0 > 0.0:
                         cumulative_phi_scatter += float(rng.normal(0.0, theta0))
+
+                if material.energy_loss_mev > 0.0:
+                    effective_particle = apply_energy_loss_to_truth_particle(
+                        effective_particle,
+                        energy_loss_mev=material.energy_loss_mev,
+                    )
 
     for i, layer in enumerate(layers):
         layer_name = _layer_name(layer, i)
