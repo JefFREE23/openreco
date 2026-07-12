@@ -24,7 +24,52 @@ The implementation is deliberately compact and Python-based so that the mathemat
 
 ---
 
-## Current status: v2 external validation complete
+## v3.0 — Detector Effects and Uncertainty Calibration
+
+OpenReco v3.0 extends the event-level reconstruction prototype into a controlled detector-effects and uncertainty-calibration study framework.
+
+v3.0 adds configurable detector assumptions for simplified cylindrical tracking studies:
+
+- hit resolution,
+- hit inefficiency,
+- dead layers,
+- random noise occupancy,
+- material budget and multiple scattering,
+- reconstruction-side process noise,
+- deterministic energy loss,
+- magnetic-field scale mismatch,
+- uncertainty-calibration helpers.
+
+The main v3.0 examples are:
+
+```text
+examples/v3_0_hit_resolution_scan.py
+examples/v3_0_inefficiency_dead_layer_scan.py
+examples/v3_0_noise_occupancy_scan.py
+examples/v3_0_material_budget_scan.py
+examples/v3_0_process_noise_scan.py
+examples/v3_0_energy_loss_scan.py
+examples/v3_0_bfield_scale_scan.py
+examples/v3_0_detector_effects_benchmark.py
+
+```
+
+The main v3.0 report artifacts are stored in:
+
+```text
+docs/reports/v3_0_detector_effects/
+```
+
+Current v3.0 validation:
+
+```text
+python -m pytest
+340 passed
+```
+
+---
+
+## v2 external validation complete
 
 OpenReco has now reached **v2.0 external validation**.
 

@@ -1,8 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from math import asin, cos, pi, sin, sqrt
 from typing import Any, Optional
+
+
+from openreco.detector_effects import (
+    DetectorEffectsConfig,
+    multiple_scattering_theta0,
+)
+from openreco.energy_loss import q_over_p_after_energy_loss
 
 import numpy as np
 
@@ -161,6 +168,42 @@ def generate_truth_particles(
 
     return particles
 
+def apply_energy_loss_to_truth_particle(
+    particle: TruthParticle,
+    *,
+    energy_loss_mev: float,
+) -> TruthParticle:
+    """Return a copy of a truth particle after deterministic energy loss.
+
+    The charge sign and direction parameters are preserved. The total momentum,
+    transverse momentum, and q/p are updated consistently.
+    """
+
+    if energy_loss_mev <= 0.0:
+        return particle
+
+    new_q_over_p = q_over_p_after_energy_loss(
+        q_over_p=particle.q_over_p,
+        energy_loss_mev=energy_loss_mev,
+    )
+
+    if not np.isfinite(new_q_over_p):
+        return replace(
+            particle,
+            pt=0.0,
+            q_over_p=new_q_over_p,
+            p=0.0,
+        )
+
+    new_p = 1.0 / abs(new_q_over_p)
+    new_pt = new_p / sqrt(1.0 + particle.tan_lambda * particle.tan_lambda)
+
+    return replace(
+        particle,
+        pt=float(new_pt),
+        q_over_p=float(new_q_over_p),
+        p=float(new_p),
+    )
 
 def generate_event(
     *,
@@ -171,6 +214,7 @@ def generate_event(
     noise_hits_per_layer: int = 0,
     measurement_sigma_phi: float = 1.0e-3,
     measurement_sigma_z: float = 0.10,
+    detector_effects: DetectorEffectsConfig | None = None,
     pt_range: tuple[float, float] = (0.5, 5.0),
     phi_range: tuple[float, float] = (0.0, 2.0 * pi),
     z0_range: tuple[float, float] = (0.0, 0.0),
@@ -193,13 +237,33 @@ def generate_event(
 
     Real hits are truth-labelled.
     Noise hits are not truth-labelled.
+
+    If detector_effects is supplied, it overrides legacy hit-resolution,
+    hit-efficiency, and noise-occupancy arguments. It can also suppress
+    selected dead layers and add simplified material-scattering effects.
     """
+
+    if noise_hits_per_layer < 0:
+        raise ValueError("noise_hits_per_layer must be non-negative")
+
+    noise_mean_per_layer = float(noise_hits_per_layer)
+
+    truth_bz = float(bz)
+
+    if detector_effects is not None:
+        measurement_sigma_phi = detector_effects.hit_resolution.sigma_phi
+        measurement_sigma_z = detector_effects.hit_resolution.sigma_z
+        hit_efficiency = detector_effects.inefficiency.hit_efficiency
+        noise_mean_per_layer = (
+            detector_effects.noise_occupancy.mean_noise_hits_per_layer
+        )
+        truth_bz = float(bz) * detector_effects.b_field_scale.truth_scale
 
     if not 0.0 <= hit_efficiency <= 1.0:
         raise ValueError("hit_efficiency must be between 0 and 1")
 
-    if noise_hits_per_layer < 0:
-        raise ValueError("noise_hits_per_layer must be non-negative")
+    if noise_mean_per_layer < 0.0:
+        raise ValueError("noise_mean_per_layer must be non-negative")
 
     if measurement_sigma_phi <= 0.0:
         raise ValueError("measurement_sigma_phi must be positive")
@@ -222,6 +286,7 @@ def generate_event(
     )
 
     measurements_by_layer: dict[str, list[EventHit]] = {}
+
     for i, layer in enumerate(layers):
         layer_name = _layer_name(layer, i)
         measurements_by_layer[layer_name] = []
@@ -230,15 +295,19 @@ def generate_event(
     covariance = np.diag([measurement_sigma_phi**2, measurement_sigma_z**2])
 
     for particle in truth_particles:
-        for i, layer in enumerate(layers):
-            if rng.random() > hit_efficiency:
-                continue
+        effective_particle = particle
+        cumulative_phi_scatter = 0.0
 
+        for i, layer in enumerate(layers):
             radius = _layer_radius(layer)
+
+            if effective_particle.pt <= 0.0:
+                break
+
             expected = _expected_cylindrical_hit(
-                particle,
+                effective_particle,
                 radius=radius,
-                bz=bz,
+                bz=truth_bz,
                 curvature_scale=curvature_scale,
             )
 
@@ -246,30 +315,70 @@ def generate_event(
                 continue
 
             true_phi, true_z = expected
-            measured_phi = _wrap_phi(float(true_phi + rng.normal(0.0, measurement_sigma_phi)))
-            measured_z = float(true_z + rng.normal(0.0, measurement_sigma_z))
+            true_phi = _wrap_phi(true_phi + cumulative_phi_scatter)
 
-            layer_name = _layer_name(layer, i)
-            measurements_by_layer[layer_name].append(
-                EventHit(
-                    hit_id=hit_id,
-                    layer_index=i,
-                    layer_name=layer_name,
-                    radius=radius,
-                    phi=measured_phi,
-                    z=measured_z,
-                    covariance=covariance.copy(),
-                    truth_particle_id=particle.truth_particle_id,
-                    is_noise=False,
-                )
+            layer_is_dead = (
+                detector_effects is not None
+                and detector_effects.dead_layers.is_dead(i)
             )
-            hit_id += 1
+
+            if not layer_is_dead and rng.random() <= hit_efficiency:
+                measured_phi = _wrap_phi(
+                    float(true_phi + rng.normal(0.0, measurement_sigma_phi))
+                )
+                measured_z = float(true_z + rng.normal(0.0, measurement_sigma_z))
+
+                layer_name = _layer_name(layer, i)
+                measurements_by_layer[layer_name].append(
+                    EventHit(
+                        hit_id=hit_id,
+                        layer_index=i,
+                        layer_name=layer_name,
+                        radius=radius,
+                        phi=measured_phi,
+                        z=measured_z,
+                        covariance=covariance.copy(),
+                        truth_particle_id=particle.truth_particle_id,
+                        is_noise=False,
+                    )
+                )
+                hit_id += 1
+
+            if detector_effects is not None:
+                material = detector_effects.material_for_layer(i)
+
+                if material.x_over_x0 > 0.0:
+                    theta0 = multiple_scattering_theta0(
+                        p_gev=effective_particle.p,
+                        x_over_x0=material.x_over_x0,
+                        beta=1.0,
+                        charge_abs=abs(float(effective_particle.charge)),
+                    )
+
+                    if theta0 > 0.0:
+                        cumulative_phi_scatter += float(rng.normal(0.0, theta0))
+
+                if material.energy_loss_mev > 0.0:
+                    effective_particle = apply_energy_loss_to_truth_particle(
+                        effective_particle,
+                        energy_loss_mev=material.energy_loss_mev,
+                    )
 
     for i, layer in enumerate(layers):
         layer_name = _layer_name(layer, i)
+
+        if detector_effects is not None and detector_effects.dead_layers.is_dead(i):
+            continue
+
         radius = _layer_radius(layer)
 
-        for _ in range(noise_hits_per_layer):
+        n_noise_hits_this_layer = (
+            int(rng.poisson(noise_mean_per_layer))
+            if detector_effects is not None
+            else int(noise_mean_per_layer)
+        )
+
+        for _ in range(n_noise_hits_this_layer):
             measurements_by_layer[layer_name].append(
                 EventHit(
                     hit_id=hit_id,

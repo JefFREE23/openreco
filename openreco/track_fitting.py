@@ -5,6 +5,8 @@ from typing import Iterable
 
 import numpy as np
 
+from openreco.detector_effects import DetectorEffectsConfig
+from openreco.process_noise import material_process_noise_matrix
 from openreco.event_generation import EventHit
 from openreco.field import UniformMagneticField
 from openreco.kalman import (
@@ -137,6 +139,57 @@ def default_initial_covariance() -> np.ndarray:
         ]
     )
 
+def build_material_process_noise_for_track(
+    track: ReconstructedTrack,
+    *,
+    detector_effects: DetectorEffectsConfig,
+    process_noise_scale: float = 1.0,
+) -> np.ndarray:
+    """
+    Build a simplified material process-noise matrix for one track candidate.
+
+    The current v3.0 EKF accepts one fixed 5x5 process-noise matrix per fit.
+    For this first reconstruction-side material model, we use the mean material
+    thickness across the candidate's used layers and the seed momentum estimate.
+
+    This is intentionally compact and deterministic. Later calibration scans can
+    vary process_noise_scale to study under/over-estimated process noise.
+    """
+
+    if process_noise_scale < 0.0:
+        raise ValueError("process_noise_scale must be non-negative")
+
+    if not track.used_measurements:
+        return np.zeros((5, 5), dtype=float)
+
+    x_over_x0_values = [
+        float(detector_effects.material_for_layer(hit.layer_index).x_over_x0)
+        for hit in track.used_measurements
+    ]
+
+    mean_x_over_x0 = float(np.mean(x_over_x0_values))
+
+    if mean_x_over_x0 <= 0.0 or process_noise_scale == 0.0:
+        return np.zeros((5, 5), dtype=float)
+
+    q_over_p = float(track.seed.q_over_p)
+    p_gev = momentum_from_q_over_p(q_over_p)
+
+    if not np.isfinite(p_gev):
+        return np.zeros((5, 5), dtype=float)
+
+    charge_abs = abs(float(np.sign(q_over_p)))
+
+    if charge_abs == 0.0:
+        charge_abs = 1.0
+
+    return material_process_noise_matrix(
+        p_gev=p_gev,
+        x_over_x0=mean_x_over_x0,
+        process_noise_scale=process_noise_scale,
+        beta=1.0,
+        charge_abs=charge_abs,
+    )
 
 def fit_track_candidate_with_ekf(
     track: ReconstructedTrack,
@@ -144,6 +197,8 @@ def fit_track_candidate_with_ekf(
     field: UniformMagneticField | None = None,
     initial_covariance: np.ndarray | None = None,
     process_noise: np.ndarray | None = None,
+    detector_effects: DetectorEffectsConfig | None = None,
+    process_noise_scale: float = 0.0,
     curvature_scale: float = 0.003,
     max_s: float = 10000.0,
     n_scan: int = 1000,
@@ -161,6 +216,9 @@ def fit_track_candidate_with_ekf(
 
     if field is None:
         field = UniformMagneticField(bz=2.0)
+    
+    if process_noise_scale < 0.0:
+        raise ValueError("process_noise_scale must be non-negative")
 
     ordered_hits = tuple(
         sorted(track.used_measurements, key=lambda hit: hit.layer_index)
@@ -185,6 +243,17 @@ def fit_track_candidate_with_ekf(
         track.seed,
         covariance=initial_covariance,
     )
+
+    if (
+        process_noise is None
+        and detector_effects is not None
+        and process_noise_scale > 0.0
+    ):
+        process_noise = build_material_process_noise_for_track(
+            track,
+            detector_effects=detector_effects,
+            process_noise_scale=process_noise_scale,
+        )
 
     filtered_results = tuple(
         filter_cylindrical_track(

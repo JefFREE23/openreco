@@ -8,11 +8,16 @@ from pathlib import Path
 from statistics import mean, pstdev
 from typing import Optional
 
+
 import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+from openreco.detector_effects import DetectorEffectsConfig
+
+from openreco.field import UniformMagneticField
 
 from openreco.event_generation import (
     Event,
@@ -46,6 +51,8 @@ def run_multi_track_reconstruction(
     n_particles: int = 5,
     hit_efficiency: float = 1.0,
     noise_hits_per_layer: int = 1,
+    detector_effects: DetectorEffectsConfig | None = None,
+    process_noise_scale: float = 0.0,
     random_seed: int = 123,
     chi2_threshold: float = 25.0,
     min_hits: int = 6,
@@ -77,6 +84,7 @@ def run_multi_track_reconstruction(
         noise_hits_per_layer=noise_hits_per_layer,
         measurement_sigma_phi=1.0e-3,
         measurement_sigma_z=0.10,
+        detector_effects=detector_effects,
         pt_range=(2.0, 5.0),
         tan_lambda_range=(-0.8, 0.8),
         rng=rng,
@@ -99,9 +107,17 @@ def run_multi_track_reconstruction(
     )
 
     if use_ekf_fit:
+        reco_bz = 2.0
+
+        if detector_effects is not None:
+            reco_bz *= detector_effects.b_field_scale.reco_scale
+
         tracks = fit_reconstructed_tracks_with_ekf(
             raw_tracks,
             fail_safely=True,
+            field=UniformMagneticField(bz=reco_bz),
+            detector_effects=detector_effects,
+            process_noise_scale=process_noise_scale,
         )
 
         if max_fit_chi2_ndof is not None:
