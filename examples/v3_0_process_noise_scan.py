@@ -31,6 +31,10 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from examples.multi_track_reconstruction import run_multi_track_reconstruction
 from openreco.detector_effects import DetectorEffectsConfig
+from openreco.uncertainty_calibration import (
+    CalibrationChoice,
+    find_best_calibration_scale,
+)
 
 
 @dataclass(frozen=True)
@@ -87,6 +91,18 @@ def _write_csv(path: str | Path, results: list[ProcessNoiseScanResult]) -> Path:
             writer.writerow(result.to_dict())
 
     return output_path
+
+def choose_best_process_noise_scale(
+    results: list[ProcessNoiseScanResult],
+) -> CalibrationChoice:
+    """Choose the process-noise scale with mean chi2/ndof closest to 1."""
+
+    return find_best_calibration_scale(
+        results,
+        scale_key="process_noise_scale",
+        metric_key="mean_chi2_ndof",
+        target_value=1.0,
+    )
 
 
 def run_single_process_noise_point(
@@ -305,6 +321,16 @@ def main(argv: list[str] | None = None) -> int:
             f"p_unc={result.momentum_uncertainty_mean:.4f}, "
             f"mom_res_std={result.momentum_residual_std:.4f}"
         )
+    best_choice = choose_best_process_noise_scale(results)
+
+    print()
+    print("Best process-noise calibration by chi2/ndof:")
+    print(
+        f"scale={best_choice.scale:.2f}, "
+        f"mean_chi2/ndof={best_choice.metric_value:.3f}, "
+        f"target={best_choice.target_value:.3f}, "
+        f"abs_distance={best_choice.absolute_distance:.3f}"
+    )
 
     print()
     print(f"CSV saved: {args.output_csv}")

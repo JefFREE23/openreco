@@ -1,4 +1,26 @@
-from examples.v3_0_process_noise_scan import run_process_noise_scan
+from examples.v3_0_process_noise_scan import (
+    choose_best_process_noise_scale,
+    run_process_noise_scan,
+)
+
+def test_v3_0_process_noise_scan_selects_best_calibration_scale(tmp_path):
+    output_csv = tmp_path / "process_noise_scan.csv"
+
+    results = run_process_noise_scan(
+        process_noise_scales=(0.0, 10.0),
+        x_over_x0_per_layer=0.02,
+        n_events=2,
+        n_particles=2,
+        min_hits=4,
+        seed=123,
+        output_path=output_csv,
+    )
+
+    choice = choose_best_process_noise_scale(results)
+
+    assert choice.target_value == 1.0
+    assert choice.scale in {0.0, 10.0}
+    assert choice.absolute_distance >= 0.0
 
 
 def test_v3_0_process_noise_scan_writes_csv(tmp_path):
