@@ -69,6 +69,53 @@ python -m pytest
 
 ---
 
+## v3.1 — Toy Resonance Physics-Observable Study
+
+OpenReco v3.1 adds a downstream physics-observable study on top of the v3.0 detector-effects framework.
+
+The controlled toy channel is:
+
+```text
+J/psi -> mu+ mu-
+```
+
+v3.1 shows how detector assumptions and reconstruction choices propagate from track-level reconstruction into a reconstructed invariant-mass observable.
+
+Main v3.1 additions:
+
+- invariant-mass utilities,
+- toy two-body resonance generation,
+- conversion of resonance daughter particles into OpenReco truth particles,
+- reconstruction bridge for supplied truth particles,
+- opposite-charge reconstructed track-pair selection,
+- reconstructed invariant-mass candidates,
+- baseline toy resonance example,
+- detector-effect-to-mass-resolution scan,
+- v3.1 CSV/report artifacts.
+
+Main v3.1 examples:
+
+```text
+examples/v3_1_toy_resonance_baseline.py
+examples/v3_1_mass_resolution_scan.py
+```
+
+Main v3.1 report artifacts:
+
+```text
+docs/reports/v3_1_toy_resonance/mass_resolution_scan.csv
+docs/reports/v3_1_toy_resonance/v3_1_toy_resonance_report.md
+```
+
+Current v3.1 branch validation:
+
+```text
+targeted v3.1 tests passed
+full suite pending before merge
+```
+
+---
+
 ## v2 external validation complete
 
 OpenReco has now reached **v2.0 external validation**.

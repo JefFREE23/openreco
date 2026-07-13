@@ -215,6 +215,7 @@ def generate_event(
     measurement_sigma_phi: float = 1.0e-3,
     measurement_sigma_z: float = 0.10,
     detector_effects: DetectorEffectsConfig | None = None,
+    truth_particles: tuple[TruthParticle, ...] | None = None,
     pt_range: tuple[float, float] = (0.5, 5.0),
     phi_range: tuple[float, float] = (0.0, 2.0 * pi),
     z0_range: tuple[float, float] = (0.0, 0.0),
@@ -275,15 +276,25 @@ def generate_event(
     detector = make_default_barrel() if detector is None else detector
     layers = _extract_layers(detector)
 
-    truth_particles = generate_truth_particles(
-        n_particles,
-        pt_range=pt_range,
-        phi_range=phi_range,
-        z0_range=z0_range,
-        tan_lambda_range=tan_lambda_range,
-        charge_choices=charge_choices,
-        rng=rng,
-    )
+    if truth_particles is None:
+        truth_particles = generate_truth_particles(
+            n_particles,
+            pt_range=pt_range,
+            phi_range=phi_range,
+            z0_range=z0_range,
+            tan_lambda_range=tan_lambda_range,
+            charge_choices=charge_choices,
+            rng=rng,
+        )
+    else:
+        truth_particles = tuple(truth_particles)
+
+        for particle in truth_particles:
+            if not isinstance(particle, TruthParticle):
+                raise TypeError(
+                    "truth_particles must contain TruthParticle objects, "
+                    f"got {type(particle).__name__}"
+                )
 
     measurements_by_layer: dict[str, list[EventHit]] = {}
 

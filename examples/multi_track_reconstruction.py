@@ -21,6 +21,7 @@ from openreco.field import UniformMagneticField
 
 from openreco.event_generation import (
     Event,
+    TruthParticle,
     count_noise_hits,
     count_real_hits,
     generate_event,
@@ -49,6 +50,7 @@ def run_multi_track_reconstruction(
     *,
     event_id: int = 0,
     n_particles: int = 5,
+    truth_particles: tuple[TruthParticle, ...] | None = None,
     hit_efficiency: float = 1.0,
     noise_hits_per_layer: int = 1,
     detector_effects: DetectorEffectsConfig | None = None,
@@ -80,6 +82,7 @@ def run_multi_track_reconstruction(
     event = generate_event(
         event_id=event_id,
         n_particles=n_particles,
+        truth_particles=truth_particles,
         hit_efficiency=hit_efficiency,
         noise_hits_per_layer=noise_hits_per_layer,
         measurement_sigma_phi=1.0e-3,
@@ -97,13 +100,17 @@ def run_multi_track_reconstruction(
     else:
         raise ValueError("seed_mode must be either 'strict' or 'hole-aware'")
 
+    max_tracks_to_find = (
+        len(truth_particles) if truth_particles is not None else n_particles
+    )
+
     raw_tracks = find_tracks_from_seeds(
         seeds,
         event.measurements_by_layer,
         chi2_threshold=chi2_threshold,
         min_hits=min_hits,
         allow_shared_hits=False,
-        max_tracks=n_particles,
+        max_tracks=max_tracks_to_find,
     )
 
     if use_ekf_fit:
